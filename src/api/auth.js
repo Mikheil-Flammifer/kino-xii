@@ -10,3 +10,6 @@ export function register({ username, email, password, confirm, avatar }) {
 
 export const login = (email, password) =>
   api('/login', { method: 'POST', body: { email, password }, auth: false })
+
+export const logout = () => api('/logout', { method: 'POST' })
+export const me = () => api('/me', { silent: true })
