@@ -12,4 +12,20 @@
   --color-success: #4ADE80;
 }
 
-body { @apply bg-bg text-white font-sans; }
+.hero {
+  background-image:
+    linear-gradient(
+      270deg,
+      rgba(0, 0, 0, 0.08) 0%,
+      rgba(0, 0, 0, 0.8) 100%
+    ),
+    url('/images/trailer-1.png');
+
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+body {
+  @apply bg-bg text-white font-sans;
+}

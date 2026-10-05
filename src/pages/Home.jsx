@@ -7,7 +7,7 @@ import {
   getComingSoonMovies,
 } from '../api/movieApi'
 
-import Hero from '../components/home/Hero'
+import Banner from '../components/home/Banner'
 import MovieCard from '../components/home/MovieCard'
 import RecentMovieCard from '../components/home/RecentMovieCard'
 import ComingSoonCard from '../components/home/ComingSoonCard'
@@ -101,10 +101,10 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#070C1C]">
-      <Hero
+    <Banner
         movies={featured}
         onOpen={openMovie}
-      />
+    />
 
       <div className="flex flex-col gap-10 pb-16">
         {recentMovies.length > 0 && (
