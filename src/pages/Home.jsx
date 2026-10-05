@@ -17,6 +17,8 @@ import {
   getRecentMovies,
 } from '../utils/recentMovies'
 
+import homeText from '../data/home.json'
+
 function SectionHeader({ title, link }) {
   return (
     <div className="flex items-end justify-between">
@@ -101,17 +103,17 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#070C1C]">
-    <Banner
-        movies={featured}
-        onOpen={openMovie}
-    />
+      <Banner
+          movies={featured}
+          onOpen={openMovie}
+      />
 
       <div className="flex flex-col gap-10 pb-16">
         {recentMovies.length > 0 && (
           <>
             <section className="px-[70px] pt-[9px]">
               <div className="mx-auto max-w-[1588px]">
-                <SectionHeader title="Recently viewed" />
+                <SectionHeader title={homeText.recent.title} />
 
                 <div className="mt-5 flex gap-5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {recentMovies.map((movie) => (
@@ -132,9 +134,9 @@ export default function Home() {
         <section className="px-[70px]">
           <div className="mx-auto max-w-[1588px]">
             <SectionHeader
-              title="NOW PLAYING"
+              title={homeText.nowPlaying.title}
               link={{
-                label: 'See all',
+                label: homeText.nowPlaying.seeAll,
                 to: '/sessions',
               }}
             />
@@ -169,7 +171,7 @@ export default function Home() {
 
         <section className="px-[70px]">
           <div className="mx-auto max-w-[1588px]">
-            <SectionHeader title="COMING SOON" />
+            <SectionHeader title={homeText.comingSoon.title} />
 
             <div className="mt-6">
               {loading ? (

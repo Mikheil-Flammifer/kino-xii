@@ -1,0 +1,28 @@
+{
+  "featured": [
+    {
+      "id": 1,
+      "title": "THE ODYSSEY",
+      "badge": "NOW SHOWING",
+      "age": "12+",
+      "duration": "2h 38m",
+      "format": "IMAX",
+      "language": "English",
+      "description": "A king spends ten years finding his way home from a war he already won, while monsters, gods, and his own restlessness make sure the return takes longer than the fighting did.",
+      "poster": "/images/odyssey-poster.png",
+      "background": "/images/trailer-1.png"
+    },
+    {
+      "id": 2,
+      "title": "INTERSTELLAR",
+      "badge": "FEATURED",
+      "age": "12+",
+      "duration": "2h 49m",
+      "format": "IMAX",
+      "language": "English",
+      "description": "A team of explorers travel through a wormhole in space in an attempt to ensure humanity's survival.",
+      "poster": "/images/interstellar-poster.png",
+      "background": "/images/interstellar.png"
+    }
+  ]
+}
