@@ -1,6 +1,6 @@
 import { useAuth } from './context/AuthContext'
 import RegisterModal from './modals/RegisterModal'
-// import LoginModal from './modals/LoginModal'  // uncomment when we build it
+import LoginModal from './modals/LoginModal'  // uncomment when we build it
 
 function App() {
   const { modal, openModal } = useAuth()
@@ -24,7 +24,7 @@ function App() {
       </div>
 
       {modal === 'register' && <RegisterModal />}
-      {/* {modal === 'login' && <LoginModal />} */}
+      {modal === 'login' && <LoginModal />}
     </>
   )
 }

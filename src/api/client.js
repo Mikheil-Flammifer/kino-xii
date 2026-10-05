@@ -3,6 +3,7 @@ const TOKEN_KEY = 'kino_token'
 
 let onUnauthorized = () => {}
 export const setUnauthorizedHandler = (fn) => { onUnauthorized = fn }
+
 export const tokenStore = {
   get: () => localStorage.getItem(TOKEN_KEY),
   set: (t) => localStorage.setItem(TOKEN_KEY, t),
@@ -18,9 +19,9 @@ export class ApiError extends Error {
   }
 }
 
-export async function api(path, { method = 'GET', body } = {}) {
+export async function api(path, { method = 'GET', body, auth = true } = {}) {
   const headers = { Accept: 'application/json' }
-  const token = tokenStore.get()
+  const token = auth ? tokenStore.get() : null
   if (token) headers.Authorization = `Bearer ${token}`
 
   if (body && !(body instanceof FormData)) {
@@ -32,7 +33,6 @@ export async function api(path, { method = 'GET', body } = {}) {
   const data = await res.json().catch(() => null)
 
   if (!res.ok) {
-    // only treat as "session expired" if we actually had a token
     if (res.status === 401 && token) onUnauthorized()
     throw new ApiError(res.status, data)
   }
