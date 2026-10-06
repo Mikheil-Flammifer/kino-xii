@@ -1,23 +1,29 @@
 import { useAuth } from '../context/AuthContext';
 import SectionHeader from '../components/SectionHeader';
 import Hero from '../components/Hero';
+import CardSmall from '../components/CardSmall';
+import { useRecentlyViewed } from '../hooks/useRecentlyViewed';
 import Footer from '../components/Footer';
 
 export default function Home() {
   const { user } = useAuth();
+  const { recent } = useRecentlyViewed();
   // later: const recent = useRecentlyViewed();
-  const recent = [];
 
   return (
     <>
       <Hero />
 
       <div className="flex flex-col gap-10 pt-8">
-        {user && recent.length > 0 && (
+       {user && recent.length > 0 && (
           <>
             <section className="px-[70px] pt-[9px]">
               <h2 className="mb-5 text-[24px] leading-[26px] font-extrabold">Recently viewed</h2>
-              <div className="flex gap-5">{/* step 3: CardSmall */}</div>
+              <div className="grid grid-cols-4 gap-5">
+                {recent.map((m) => (
+                  <CardSmall key={m.id} movie={m} />
+                ))}
+              </div>
             </section>
             <div className="h-px bg-line" />
           </>
