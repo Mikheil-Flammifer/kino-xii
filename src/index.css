@@ -10,7 +10,6 @@
   --color-muted: #A9A9A9;
   --color-disabled: #505261;
   --color-success: #4ADE80;
-  --color-warning: #E27E04;
 }
 
 .hero {
@@ -29,4 +28,9 @@
 
 body {
   @apply bg-bg text-white font-sans;
+}
+
+@keyframes hero-progress {
+  from { width: 0%; }
+  to { width: 100%; }
 }

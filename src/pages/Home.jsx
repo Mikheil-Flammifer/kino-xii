@@ -1,207 +1,42 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-
-import {
-  getFeaturedMovies,
-  getNowPlayingMovies,
-  getComingSoonMovies,
-} from '../api/movieApi'
-
-import Banner from '../components/home/Banner'
-import MovieCard from '../components/home/MovieCard'
-import RecentMovieCard from '../components/home/RecentMovieCard'
-import ComingSoonCard from '../components/home/ComingSoonCard'
-
-import {
-  addRecentMovie,
-  getRecentMovies,
-} from '../utils/recentMovies'
-
-import homeText from '../data/home.json'
-
-function SectionHeader({ title, link }) {
-  return (
-    <div className="flex items-end justify-between">
-      <h2 className="text-[24px] font-extrabold leading-[26px] text-white">
-        {title}
-      </h2>
-
-      {link && (
-        <Link
-          to={link.to}
-          className="text-[14px] font-semibold text-[#EC3013]"
-        >
-          {link.label}
-        </Link>
-      )}
-    </div>
-  )
-}
-
-function ErrorMessage({ children }) {
-  return (
-    <div className="rounded-2xl bg-[#1E2031] px-5 py-6 text-sm text-[#A9A9A9]">
-      {children}
-    </div>
-  )
-}
-
-function MovieCardSkeleton() {
-  return (
-    <div className="h-[452px] w-[260px] shrink-0 animate-pulse rounded-[20px] bg-[#1E2031] p-3">
-      <div className="h-[300px] rounded-[14px] bg-white/5" />
-      <div className="mt-4 h-5 w-3/4 rounded bg-white/5" />
-      <div className="mt-2 h-4 w-1/2 rounded bg-white/5" />
-    </div>
-  )
-}
+import { useAuth } from '../context/AuthContext';
+import SectionHeader from '../components/SectionHeader';
+import Hero from '../components/Hero';
+import Footer from '../components/Footer';
 
 export default function Home() {
-  const [featured, setFeatured] = useState([])
-  const [nowPlaying, setNowPlaying] = useState([])
-  const [comingSoon, setComingSoon] = useState([])
-  const [recentMovies, setRecentMovies] = useState(
-    getRecentMovies()
-  )
-
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    async function loadHome() {
-      try {
-        setLoading(true)
-        setError(null)
-
-        const [
-          featuredMovies,
-          nowPlayingMovies,
-          comingSoonMovies,
-        ] = await Promise.all([
-          getFeaturedMovies(),
-          getNowPlayingMovies(),
-          getComingSoonMovies(),
-        ])
-
-        setFeatured(featuredMovies.slice(0, 4))
-        setNowPlaying(nowPlayingMovies)
-        setComingSoon(comingSoonMovies)
-      } catch (err) {
-        setError(err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadHome()
-  }, [])
-
-  const openMovie = (movie) => {
-    addRecentMovie(movie)
-    setRecentMovies(getRecentMovies())
-  }
+  const { user } = useAuth();
+  // later: const recent = useRecentlyViewed();
+  const recent = [];
 
   return (
-    <main className="min-h-screen bg-[#070C1C]">
-      <Banner
-          movies={featured}
-          onOpen={openMovie}
-      />
+    <>
+      <Hero />
 
-      <div className="flex flex-col gap-10 pb-16">
-        {recentMovies.length > 0 && (
+      <div className="flex flex-col gap-10 pt-8">
+        {user && recent.length > 0 && (
           <>
             <section className="px-[70px] pt-[9px]">
-              <div className="mx-auto max-w-[1588px]">
-                <SectionHeader title={homeText.recent.title} />
-
-                <div className="mt-5 flex gap-5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {recentMovies.map((movie) => (
-                    <RecentMovieCard
-                      key={movie.id}
-                      movie={movie}
-                      onOpen={openMovie}
-                    />
-                  ))}
-                </div>
-              </div>
+              <h2 className="mb-5 text-[24px] leading-[26px] font-extrabold">Recently viewed</h2>
+              <div className="flex gap-5">{/* step 3: CardSmall */}</div>
             </section>
-
-            <div className="h-px bg-[#2A2C3D]" />
+            <div className="h-px bg-line" />
           </>
         )}
 
-        <section className="px-[70px]">
-          <div className="mx-auto max-w-[1588px]">
-            <SectionHeader
-              title={homeText.nowPlaying.title}
-              link={{
-                label: homeText.nowPlaying.seeAll,
-                to: '/sessions',
-              }}
-            />
-
-            <div className="mt-6">
-              {loading ? (
-                <div className="flex gap-[17px] overflow-hidden">
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <MovieCardSkeleton key={index} />
-                  ))}
-                </div>
-              ) : error ? (
-                <ErrorMessage>
-                  {error.message}
-                </ErrorMessage>
-              ) : (
-                <div className="flex gap-[17px] overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {nowPlaying.map((movie) => (
-                    <MovieCard
-                      key={movie.id}
-                      movie={movie}
-                      onOpen={openMovie}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+        <section className="flex flex-col gap-6 px-[70px]">
+          <SectionHeader title="Now playing" to="/sessions" />
+          <div className="grid grid-cols-6 gap-[17px]">{/* step 4: CardBig */}</div>
         </section>
 
-        <div className="h-px bg-[#2A2C3D]" />
+        <div className="h-px bg-line" />
 
-        <section className="px-[70px]">
-          <div className="mx-auto max-w-[1588px]">
-            <SectionHeader title={homeText.comingSoon.title} />
-
-            <div className="mt-6">
-              {loading ? (
-                <div className="flex gap-5">
-                  {[1, 2, 3].map((item) => (
-                    <div
-                      key={item}
-                      className="h-[160px] w-[470px] animate-pulse rounded-[20px] bg-[#1E2031]"
-                    />
-                  ))}
-                </div>
-              ) : error ? (
-                <ErrorMessage>
-                  {error.message}
-                </ErrorMessage>
-              ) : (
-                <div className="flex gap-5 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {comingSoon.map((movie) => (
-                    <ComingSoonCard
-                      key={movie.id}
-                      movie={movie}
-                      onOpen={openMovie}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+        <section className="flex flex-col gap-6 px-[70px]">
+          <SectionHeader title="Coming soon..." />
+          <div className="grid grid-cols-3 gap-5">{/* step 5: CardMedium */}</div>
         </section>
       </div>
-    </main>
-  )
+
+      <Footer />
+    </>
+  );
 }

@@ -1,24 +1,16 @@
 {
-  "hero": {
-    "badge": "NOW SHOWING",
-    "title": "THE ODYSSEY",
-    "age": "12+",
-    "duration": "2h 38m",
-    "format": "IMAX",
-    "language": "English",
-    "description": "A king spends ten years finding his way home from a war he already won, while monsters, gods, and his own restlessness make sure the return takes longer than the fighting did.",
-    "buyTicket": "Buy Ticket",
-    "watchTrailer": "Watch Trailer"
-  },
-
-  "nowPlaying": {
-    "title": "Now Playing",
-    "seeAll": "See All",
-    "buyTicket": "Buy Ticket"
-  },
-
-  "comingSoon": {
-    "title": "Coming Soon",
-    "notifyMe": "Notify Me"
-  }
+  "featured": [
+    {
+      "id": 1,
+      "title": "THE ODYSSEY",
+      "age_rating": "12+",
+      "duration": 158,
+      "genre": "Adventure",
+      "language": "English",
+      "description": "A king spends ten years finding his way home from a war he already won, while monsters, gods, and his own restlessness make sure the return takes longer than the fighting did.",
+      "backdrop_url": "/images/trailer-1.png"
+    }
+  ],
+  "nowPlaying": [],
+  "comingSoon": []
 }
