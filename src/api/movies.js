@@ -5,12 +5,12 @@ const USE_MOCK = false; // set to false when the real API is connected
 const fake = (data) => new Promise((resolve) => setTimeout(() => resolve(data), 300));
 
 // Turns "Drama", { name: 'Drama' }, { code: '16+' } ... into a plain string
-const label = (v) => {
+export const label = (v) => {
   if (v == null) return null;
   if (typeof v === 'string' || typeof v === 'number') return String(v);
   return v.name ?? v.label ?? v.title ?? v.code ?? null;
 };
-const labels = (arr) => (Array.isArray(arr) ? arr.map(label).filter(Boolean) : []);
+export const labels = (arr) => (Array.isArray(arr) ? arr.map(label).filter(Boolean) : []);
 
 export function normalizeMovie(m) {
   return {
@@ -36,6 +36,7 @@ export function normalizeMovie(m) {
 
 const list = (res) => (Array.isArray(res) ? res : res.data ?? []).map(normalizeMovie);
 
+
 export const getFeatured = async () =>
   list(USE_MOCK ? await fake(featuredMock) : await api('/movies/featured', { auth: false }));
 
@@ -44,3 +45,4 @@ export const getNowPlaying = async () =>
 
 export const getComingSoon = async () =>
   list(USE_MOCK ? await fake(comingSoonMock) : await api('/movies/coming-soon', { auth: false }));
+

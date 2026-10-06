@@ -12,6 +12,7 @@ import { getComingSoon } from '../api/movies';
 import CardMedium from '../components/CardMedium';
 import { useNotifyList } from '../hooks/useNotifyList';
 import Footer from '../components/Footer';
+import Sessions from "./Sessions";
 
 export default function Home() {
   const { user } = useAuth();
@@ -109,6 +110,7 @@ export default function Home() {
             )}
           </section>
       </div>
+      <Route path="/sessions" element={<Sessions />} />
 
       <Footer />
     </>
