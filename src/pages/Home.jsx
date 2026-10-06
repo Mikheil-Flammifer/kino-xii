@@ -3,11 +3,17 @@ import SectionHeader from '../components/SectionHeader';
 import Hero from '../components/Hero';
 import CardSmall from '../components/CardSmall';
 import { useRecentlyViewed } from '../hooks/useRecentlyViewed';
+import { getNowPlaying } from '../api/movies';
+import { useAsync } from '../hooks/useAsync';
+import CardBig from '../components/CardBig';
+import CardSkeleton from '../components/CardSkeleton';
+import Button from '../components/Button';
 import Footer from '../components/Footer';
 
 export default function Home() {
   const { user } = useAuth();
   const { recent } = useRecentlyViewed();
+  const nowPlaying = useAsync(getNowPlaying);
   // later: const recent = useRecentlyViewed();
 
   return (
@@ -31,7 +37,33 @@ export default function Home() {
 
         <section className="flex flex-col gap-6 px-[70px]">
           <SectionHeader title="Now playing" to="/sessions" />
-          <div className="grid grid-cols-6 gap-[17px]">{/* step 4: CardBig */}</div>
+
+          {nowPlaying.status === 'loading' && (
+            <div className="grid grid-cols-6 gap-[17px]">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <CardSkeleton key={i} />
+              ))}
+            </div>
+          )}
+
+          {nowPlaying.status === 'error' && (
+            <div className="flex flex-col items-center gap-3 py-10">
+              <p className="text-muted">Couldn't load films.</p>
+              <Button onClick={nowPlaying.reload}>Retry</Button>
+            </div>
+          )}
+
+          {nowPlaying.status === 'ready' && nowPlaying.data.length === 0 && (
+            <p className="py-10 text-center text-muted">No films are playing right now.</p>
+          )}
+
+          {nowPlaying.status === 'ready' && nowPlaying.data.length > 0 && (
+            <div className="grid grid-cols-6 gap-[17px]">
+              {nowPlaying.data.slice(0, 6).map((m) => (
+                <CardBig key={m.id} movie={m} />
+              ))}
+            </div>
+          )}
         </section>
 
         <div className="h-px bg-line" />
