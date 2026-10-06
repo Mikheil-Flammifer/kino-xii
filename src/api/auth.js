@@ -1,15 +1,24 @@
+import { api } from './client';
+
 export function register({ username, email, password, confirm, avatar }) {
-  const fd = new FormData()
-  fd.append('username', username)
-  fd.append('email', email)
-  fd.append('password', password)
-  fd.append('password_confirmation', confirm)
-  if (avatar) fd.append('avatar', avatar)
-  return api('/register', { method: 'POST', body: fd, auth: false })
+  const form = new FormData();
+  form.append('username', username);
+  form.append('email', email);
+  form.append('password', password);
+  form.append('password_confirmation', confirm); // modal field "confirm" -> API name
+  if (avatar) form.append('avatar', avatar);
+
+  return api('/register', { method: 'POST', body: form, auth: false });
 }
 
-export const login = (email, password) =>
-  api('/login', { method: 'POST', body: { email, password }, auth: false })
+export function login({ email, password }) {
+  return api('/login', { method: 'POST', body: { email, password }, auth: false });
+}
 
-export const logout = () => api('/logout', { method: 'POST' })
-export const me = () => api('/me', { silent: true })
+export function logout() {
+  return api('/logout', { method: 'POST' });
+}
+
+export function me() {
+  return api('/me', { silent: true });
+}
