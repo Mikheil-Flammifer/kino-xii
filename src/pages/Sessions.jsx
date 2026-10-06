@@ -6,10 +6,12 @@ import { getSessions } from '../api/sessions';
 import { useAsync } from '../hooks/useAsync';
 import Button from '../components/Button';
 import CardSkeleton from '../components/CardSkeleton';
+import FilterSidebar from '../components/FilterSidebar';
 import Footer from '../components/Footer';
 
 const MULTI = ['venue', 'format', 'language', 'time_band'];
-const LOW_SEATS = 10; // red "N left" at or below this
+const FILMS_PER_PAGE = 10;
+const LOW_SEATS = 10;
 const EMPTY = { venues: [], formats: [], languages: [], timeBands: [], sorts: [] };
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -41,40 +43,7 @@ function pageList(current, last) {
 
 /* ---------- small pieces ---------- */
 
-function FilterGroup({ title, children }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <h3 className="text-[12px] leading-[13px] font-semibold tracking-[0.06em] text-muted uppercase">
-        {title}
-      </h3>
-      {children}
-    </div>
-  );
-}
 
-function CheckRow({ checked, onChange, label, hint }) {
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={checked}
-      onClick={onChange}
-      className="flex cursor-pointer items-center gap-[10px] text-left"
-    >
-      <span
-        className={`flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border-[1.5px] transition ${
-          checked ? 'border-accent bg-accent' : 'border-disabled'
-        }`}
-      >
-        {checked && <Check size={12} strokeWidth={3} />}
-      </span>
-      <span className="text-[14px] leading-[15px] font-semibold">
-        {label}
-        {hint && <span className="ml-[5px] text-[12px] font-normal text-muted">· {hint}</span>}
-      </span>
-    </button>
-  );
-}
 
 const Divider = () => <div className="h-px w-full bg-line" />;
 
@@ -115,7 +84,7 @@ function SessionCard({ s, onOpen }) {
             )
           )}
           {s.price != null && (
-            <span className="text-[14px] leading-[15px] font-extrabold">₾{s.price}</span>
+            <span className="text-[14px] leading-[15px] font-extrabold">from ₾{s.price}</span>
           )}
         </div>
       </div>
@@ -133,36 +102,50 @@ export default function Sessions() {
   const days = useMemo(nextSevenDays, []);
 
   const read = (k) => (params.get(k) ?? '').split(',').filter(Boolean);
-  const date = params.get('date') ?? '';
+  const date = params.get('date') || days[0].iso; // default: today
   const search = params.get('search') ?? '';
   const sort = params.get('sort') ?? '';
   const page = Number(params.get('page')) || 1;
 
-  // Any change resets pagination unless it is the page itself
+  // No `replace`: every change is a history entry, so Back restores the previous filters.
+  // Any change except the page itself returns to page 1.
   const update = useCallback(
     (changes) =>
-      setParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          Object.entries(changes).forEach(([k, v]) => (v ? next.set(k, v) : next.delete(k)));
-          if (!('page' in changes)) next.delete('page');
-          return next;
-        },
-        { replace: true }
-      ),
+      setParams((prev) => {
+        const next = new URLSearchParams(prev);
+        Object.entries(changes).forEach(([k, v]) => (v ? next.set(k, v) : next.delete(k)));
+        if (!('page' in changes)) next.delete('page');
+        return next;
+      }),
     [setParams]
   );
+
+  // Formats offered by the selected venues (null = no venue selected / unknown -> show all)
+  const formatsFor = (venueValues) => {
+    const picked = o.venues.filter((v) => venueValues.includes(v.value));
+    if (!picked.length || picked.some((v) => !v.formats)) return null;
+    return new Set(picked.flatMap((v) => v.formats));
+  };
+  const allowedFormats = formatsFor(read('venue'));
+  const formatOptions = allowedFormats ? o.formats.filter((f) => allowedFormats.has(f.value)) : o.formats;
 
   const toggle = (key, value) => {
     const cur = read(key);
     const next = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value];
-    update({ [key]: next.join(',') });
+    const changes = { [key]: next.join(',') };
+
+    // Dropping a venue can make a selected format unavailable: remove it too
+    if (key === 'venue') {
+      const allowed = formatsFor(next);
+      if (allowed) changes.format = read('format').filter((f) => allowed.has(f)).join(',');
+    }
+    update(changes);
   };
 
-  const activeCount = MULTI.reduce((n, k) => n + read(k).length, 0) + (date ? 1 : 0);
-  const clearAll = () => setParams({}, { replace: true });
+  const activeCount = MULTI.reduce((n, k) => n + read(k).length, 0); // date is not counted
+  // Clears everything except the date
+  const clearAll = () => setParams({ date }, {});
 
-  // Refetch whenever the URL changes
   const query = {
     search,
     date,
@@ -176,114 +159,65 @@ export default function Sessions() {
   const queryKey = JSON.stringify(query);
   const fetchSessions = useCallback(() => getSessions(JSON.parse(queryKey)), [queryKey]);
   const sessions = useAsync(fetchSessions);
+  const ready = sessions.status === 'ready';
 
-  const groups = useMemo(() => {
-    if (sessions.status !== 'ready') return [];
+  // Group by movie; paginate 10 films per page (client-side if the API returns everything)
+  const { pageGroups, lastPage, total } = useMemo(() => {
+    if (!ready) return { pageGroups: [], lastPage: 1, total: 0 };
     const map = new Map();
     sessions.data.items.forEach((s) => {
       if (!map.has(s.movie.id)) map.set(s.movie.id, { movie: s.movie, items: [] });
       map.get(s.movie.id).items.push(s);
     });
-    return [...map.values()];
-  }, [sessions.status, sessions.data]);
+    const all = [...map.values()];
+    const serverPaged = sessions.data.lastPage > 1;
+    if (serverPaged) {
+      return { pageGroups: all, lastPage: sessions.data.lastPage, total: sessions.data.total };
+    }
+    return {
+      pageGroups: all.slice((page - 1) * FILMS_PER_PAGE, page * FILMS_PER_PAGE),
+      lastPage: Math.max(1, Math.ceil(all.length / FILMS_PER_PAGE)),
+      total: sessions.data.items.length,
+    };
+  }, [ready, sessions.data, page]);
 
-  const checkList = (key, list) =>
-    list.map((x) => (
-      <CheckRow
-        key={x.value}
-        label={x.label}
-        hint={x.hint}
-        checked={read(key).includes(x.value)}
-        onChange={() => toggle(key, x.value)}
-      />
-    ));
-
-  const ready = sessions.status === 'ready';
-  const lastPage = ready ? sessions.data.lastPage : 1;
 
   return (
     <>
       <div className="min-h-screen px-[51px] pt-[117px] pb-16">
-        {/* Page header */}
         <div className="mb-9 flex flex-col gap-[6px]">
           <h1 className="text-[24px] leading-[26px] font-extrabold">Sessions</h1>
           <p className="text-[14px] leading-[18px] text-muted">Browse showtimes across all venues</p>
         </div>
 
         <div className="flex items-start gap-[51px]">
-          {/* ---------- Filter sidebar ---------- */}
-          <aside className="flex w-[320px] shrink-0 flex-col gap-6 rounded-2xl bg-surface p-6">
-            <h2 className="text-[18px] leading-[20px] font-extrabold">Filters</h2>
-
-            <FilterGroup title="Venue">{checkList('venue', o.venues)}</FilterGroup>
-            <Divider />
-
-            <FilterGroup title="Date">
-              <div className="grid grid-cols-7 gap-[6px]">
-                {days.map((d) => {
-                  const on = date === d.iso;
-                  return (
-                    <button
-                      key={d.iso}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => update({ date: on ? '' : d.iso })}
-                      className={`flex h-[54px] cursor-pointer flex-col items-center justify-center gap-[6px] rounded-lg text-[12px] leading-[13px] font-semibold shadow-[0_1px_2px_rgba(0,0,0,0.2)] transition ${
-                        on ? 'bg-accent' : 'bg-line hover:brightness-125'
-                      }`}
-                    >
-                      <span>{d.weekday}</span>
-                      <span>{d.day}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </FilterGroup>
-            <Divider />
-
-            <FilterGroup title="Format">{checkList('format', o.formats)}</FilterGroup>
-            <Divider />
-
-            <FilterGroup title="Language">{checkList('language', o.languages)}</FilterGroup>
-            <Divider />
-
-            <FilterGroup title="Time of day">{checkList('time_band', o.timeBands)}</FilterGroup>
-            <Divider />
-
-            <div className="flex items-center justify-center gap-3 text-[12px] leading-4 text-muted">
-              <span>
-                {activeCount} {activeCount === 1 ? 'filter' : 'filters'} active
-              </span>
-              {activeCount > 0 && (
-                <button
-                  type="button"
-                  onClick={clearAll}
-                  className="cursor-pointer font-semibold text-accent hover:underline"
-                >
-                  Clear all
-                </button>
-              )}
-            </div>
-
-            {filters.status === 'error' && (
-              <p className="text-[12px] text-muted">
-                Filters failed to load.{' '}
-                <button onClick={filters.reload} className="cursor-pointer text-accent underline">
-                  Retry
-                </button>
-              </p>
-            )}
-          </aside>
+          {/* ---------- Filter sidebar (sticky) ---------- */}
+            <FilterSidebar
+              options={o}
+              formatOptions={formatOptions}
+              loading={filters.status === 'loading'}
+              error={filters.status === 'error'}
+              onRetry={filters.reload}
+              days={days}
+              date={date}
+              selected={{
+                venue: read('venue'),
+                format: read('format'),
+                language: read('language'),
+                time_band: read('time_band'),
+              }}
+              onToggle={toggle}
+              onDate={(iso) => update({ date: iso })}
+              activeCount={activeCount}
+              onClear={clearAll}
+            />
 
           {/* ---------- Results ---------- */}
           <section className="flex min-w-0 flex-1 flex-col items-center gap-[52px]">
             <div className="flex w-full flex-col gap-6">
-              {/* Count + sort */}
               <div className="flex items-center justify-between">
                 <p className="text-[14px] leading-[15px] font-semibold">
-                  {ready
-                    ? `Showing ${sessions.data.total} ${sessions.data.total === 1 ? 'session' : 'sessions'}`
-                    : ' '}
+                  {ready && (total > 0 ? `Showing ${total} ${total === 1 ? 'session' : 'sessions'}` : 'No sessions found')}
                 </p>
 
                 {o.sorts.length > 0 && (
@@ -333,56 +267,42 @@ export default function Sessions() {
                 </div>
               )}
 
-              {ready && groups.length === 0 && (
+              {ready && pageGroups.length === 0 && (
                 <div className="flex flex-col items-center gap-3 py-16">
-                  <p className="text-muted">No sessions match your filters.</p>
-                  {(activeCount > 0 || search) && (
+                  <p className="text-muted">No sessions found</p>
+                  {activeCount > 0 && (
                     <Button variant="glass" onClick={clearAll}>
-                      Clear filters
+                      Clear All Filters
                     </Button>
                   )}
                 </div>
               )}
 
-              {ready && groups.length > 0 && (
+              {ready && pageGroups.length > 0 && (
                 <div className="flex flex-col gap-8">
-                  {groups.map((g, i) => (
+                  {pageGroups.map((g, i) => (
                     <div key={g.movie.id} className="flex flex-col gap-8">
                       {i > 0 && <Divider />}
                       <div className="flex flex-col gap-[14px]">
-                        {/* Movie row */}
                         <div className="flex items-center gap-4">
-                          <img
-                            src={g.movie.poster}
-                            alt=""
-                            className="h-20 w-14 shrink-0 rounded-lg object-cover"
-                          />
+                          <img src={g.movie.poster} alt="" className="h-20 w-14 shrink-0 rounded-lg object-cover" />
                           <div className="flex min-w-0 items-center gap-3">
-                            <h3 className="truncate text-[18px] leading-[20px] font-extrabold">
-                              {g.movie.title}
-                            </h3>
+                            <h3 className="truncate text-[18px] leading-[20px] font-extrabold">{g.movie.title}</h3>
                             {g.movie.ageRating && (
                               <span className="rounded-full bg-accent/10 px-2 py-1 text-[12px] leading-[13px] font-semibold text-accent">
                                 {g.movie.ageRating}
                               </span>
                             )}
                             {g.movie.duration && (
-                              <span className="text-[14px] leading-[18px] text-muted">
-                                {g.movie.duration} min
-                              </span>
+                              <span className="text-[14px] leading-[18px] text-muted">{g.movie.duration} min</span>
                             )}
                           </div>
                         </div>
 
-                        {/* Showtime cards */}
                         <div className="flex flex-wrap gap-3">
                           {g.items.map((s) => (
-                            // Seat modal comes later; for now open the movie page
-                            <SessionCard
-                              key={s.id}
-                              s={s}
-                              onOpen={() => navigate(`/movies/${g.movie.id}`)}
-                            />
+                            // Seat selection comes later; for now open the movie page
+                            <SessionCard key={s.id} s={s} onOpen={() => navigate(`/movies/${g.movie.id}`)} />
                           ))}
                         </div>
                       </div>
@@ -394,47 +314,50 @@ export default function Sessions() {
 
             {/* Pagination */}
             {ready && lastPage > 1 && (
-              <nav className="flex items-center gap-2" aria-label="Pagination">
-                <button
-                  type="button"
-                  disabled={page <= 1}
-                  onClick={() => update({ page: String(page - 1) })}
-                  aria-label="Previous page"
-                  className="flex size-10 cursor-pointer items-center justify-center rounded-full bg-surface text-muted transition hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ChevronLeft size={16} />
-                </button>
+              <div className="flex flex-col items-center gap-3">
+                <nav className="flex items-center gap-2" aria-label="Pagination">
+                  <button
+                    type="button"
+                    disabled={page <= 1}
+                    onClick={() => update({ page: String(page - 1) })}
+                    aria-label="Previous page"
+                    className="flex size-10 cursor-pointer items-center justify-center rounded-full bg-surface text-muted transition hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
 
-                {pageList(page, lastPage).map((n, i) =>
-                  n === '…' ? (
-                    <span key={`gap-${i}`} className="flex size-10 items-center justify-center text-muted">
-                      …
-                    </span>
-                  ) : (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => update({ page: n > 1 ? String(n) : '' })}
-                      aria-current={n === page ? 'page' : undefined}
-                      className={`flex size-10 cursor-pointer items-center justify-center rounded-full text-[14px] font-medium transition ${
-                        n === page ? 'bg-accent text-white' : 'text-muted hover:bg-white/10'
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  )
-                )}
+                  {pageList(page, lastPage).map((n, i) =>
+                    n === '…' ? (
+                      <span key={`gap-${i}`} className="flex size-10 items-center justify-center text-muted">…</span>
+                    ) : (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => update({ page: n > 1 ? String(n) : '' })}
+                        aria-current={n === page ? 'page' : undefined}
+                        className={`flex size-10 cursor-pointer items-center justify-center rounded-full text-[14px] font-medium transition ${
+                          n === page ? 'bg-accent text-white' : 'text-muted hover:bg-white/10'
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    )
+                  )}
 
-                <button
-                  type="button"
-                  disabled={page >= lastPage}
-                  onClick={() => update({ page: String(page + 1) })}
-                  aria-label="Next page"
-                  className="flex size-10 cursor-pointer items-center justify-center rounded-full bg-surface text-muted transition hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </nav>
+                  <button
+                    type="button"
+                    disabled={page >= lastPage}
+                    onClick={() => update({ page: String(page + 1) })}
+                    aria-label="Next page"
+                    className="flex size-10 cursor-pointer items-center justify-center rounded-full bg-surface text-muted transition hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </nav>
+                <p className="text-[12px] leading-4 text-muted">
+                  Page {page} of {lastPage}
+                </p>
+              </div>
             )}
           </section>
         </div>

@@ -5,10 +5,12 @@ import { label } from './movies';
 const BAND_HINT = { morning: 'before 12:00', afternoon: '12:00–18:00', evening: 'after 18:00' };
 
 // "Drama" | { slug, name, city } ... -> { value, label, hint }
+const slugOf = (x) => String(x?.slug ?? x?.id ?? x?.code ?? x?.value ?? x);
+
 const opt = (v) => {
   if (v == null) return null;
   if (typeof v !== 'object') {
-    return { value: String(v), label: String(v), hint: BAND_HINT[v] ?? '' };
+    return { value: String(v), label: String(v), hint: BAND_HINT[v] ?? '', formats: null };
   }
   const value = v.slug ?? v.id ?? v.code ?? v.value ?? v.key;
   if (value == null) return null;
@@ -16,6 +18,8 @@ const opt = (v) => {
     value: String(value),
     label: label(v) ?? String(value),
     hint: v.city ?? v.hint ?? v.description ?? BAND_HINT[value] ?? '',
+    // venues only: which formats this venue offers (null = unknown, show all)
+    formats: Array.isArray(v.formats) ? v.formats.map(slugOf) : null,
   };
 };
 const opts = (arr) => (Array.isArray(arr) ? arr.map(opt).filter(Boolean) : []);
