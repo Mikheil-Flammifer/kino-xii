@@ -110,7 +110,6 @@ export default function Home() {
             )}
           </section>
       </div>
-      <Route path="/sessions" element={<Sessions />} />
 
       <Footer />
     </>

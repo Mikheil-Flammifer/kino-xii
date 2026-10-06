@@ -1,22 +1,21 @@
-import { useAuth } from './context/AuthContext'
-import RegisterModal from './modals/RegisterModal'
-import LoginModal from './modals/LoginModal'
-import Home from './pages/Home'
-import Navbar from './components/Navbar'
+import { Routes, Route } from 'react-router-dom';
+import Navbar from './components/Navbar';
+import Home from './pages/Home';
+import Sessions from './pages/Sessions';
+// ...your other imports (Navbar, modals, useAuth)
 
-function App() {
-  const { modal } = useAuth()
+export default function App() {
+  // ...your existing modal logic
 
   return (
     <>
       <Navbar />
-
-      <Home />
-
-      {modal === 'register' && <RegisterModal />}
-      {modal === 'login' && <LoginModal />}
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/sessions" element={<Sessions />} />
+        <Route path="/profile" element={<div className="pt-[111px] px-[70px]">Profile</div>} />
+      </Routes>
+      {/* ...your modals */}
     </>
-  )
+  );
 }
-
-export default App

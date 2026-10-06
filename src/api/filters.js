@@ -1,12 +1,22 @@
 import { api } from './client';
 import { label } from './movies';
 
-// "Drama" | { id, name } | { code } | { slug, label } -> { value, label }
+// Display-only fallback if the API sends no hint for a time band
+const BAND_HINT = { morning: 'before 12:00', afternoon: '12:00–18:00', evening: 'after 18:00' };
+
+// "Drama" | { slug, name, city } ... -> { value, label, hint }
 const opt = (v) => {
   if (v == null) return null;
-  if (typeof v !== 'object') return { value: String(v), label: String(v) };
+  if (typeof v !== 'object') {
+    return { value: String(v), label: String(v), hint: BAND_HINT[v] ?? '' };
+  }
   const value = v.slug ?? v.id ?? v.code ?? v.value ?? v.key;
-  return value == null ? null : { value: String(value), label: label(v) ?? String(value) };
+  if (value == null) return null;
+  return {
+    value: String(value),
+    label: label(v) ?? String(value),
+    hint: v.city ?? v.hint ?? v.description ?? BAND_HINT[value] ?? '',
+  };
 };
 const opts = (arr) => (Array.isArray(arr) ? arr.map(opt).filter(Boolean) : []);
 
