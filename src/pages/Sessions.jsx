@@ -92,29 +92,23 @@ function SessionCard({ s, onOpen }) {
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[18px] leading-[20px] font-extrabold">{s.time}</span>
-        {s.format && (
-          <span className="rounded-full bg-line px-[10px] py-[5px] text-[12px] leading-[13px] font-semibold uppercase">
-            {s.format}
-          </span>
-        )}
+        <span className="text-[18px] leading-[20px] font-extrabold">{s.time || '--:--'}</span>
+        <span className="rounded-full bg-line px-[10px] py-[5px] text-[12px] leading-[13px] font-semibold uppercase">
+          {s.format || 'Standard'}
+        </span>
       </div>
 
       <div className="flex items-end gap-2">
         <div className="flex min-w-0 flex-1 flex-col gap-[10px]">
-          <span className="truncate text-[12px] leading-4 text-muted">{s.language}</span>
-          <span className="truncate text-[12px] leading-[13px] font-semibold">{place}</span>
+          <span className="truncate text-[12px] leading-4 text-muted">{s.language || '—'}</span>
+          <span className="truncate text-[12px] leading-[13px] font-semibold">{place || '—'}</span>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-[10px]">
           {s.isSoldOut ? (
             <span className="text-[12px] leading-4 text-muted">Sold out</span>
           ) : (
             s.seatsLeft != null && (
-              <span
-                className={`flex items-center gap-1 text-[12px] leading-4 ${
-                  low ? 'text-accent' : 'text-success'
-                }`}
-              >
+              <span className={`flex items-center gap-1 text-[12px] leading-4 ${low ? 'text-accent' : 'text-success'}`}>
                 <Armchair size={12} />
                 {s.seatsLeft} left
               </span>

@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const IMG_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-const MAX_AVATAR = 2 * 1024 * 1024 // API: max 2MB
+const MAX_AVATAR = 2 * 1024 * 1024
 
 const rules = {
   username: (v) => (v.trim().length < 3 ? 'Minimum 3 characters' : ''),
