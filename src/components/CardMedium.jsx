@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Bell, BellRing } from 'lucide-react';
+import { moviePath } from '../utils/paths';
 
 function releaseLabel(date) {
   if (!date) return 'COMING SOON';
@@ -17,7 +18,7 @@ export default function CardMedium({ movie, notified, onNotify }) {
 
   return (
     <article className="flex h-[160px] items-center gap-[15px] rounded-[20px] bg-surface p-3 shadow-[0_1px_4px_rgba(0,0,0,0.2)]">
-      <Link to={`/movies/${movie.id}`} className="h-[136px] min-w-0 flex-1">
+      <Link to={moviePath(movie)} className="h-[136px] min-w-0 flex-1">
         <img
           src={img}
           alt={movie.title}
@@ -32,7 +33,7 @@ export default function CardMedium({ movie, notified, onNotify }) {
           </p>
           <div className="flex flex-col gap-[10px]">
             <div className="flex flex-col gap-[7px]">
-              <Link to={`/movies/${movie.id}`}>
+              <Link to={moviePath(movie)}>
                 <h3 className="truncate text-[12px] leading-[13px] font-semibold">
                   {movie.title}
                 </h3>

@@ -13,25 +13,45 @@ export const label = (v) => {
 export const labels = (arr) => (Array.isArray(arr) ? arr.map(label).filter(Boolean) : []);
 
 export function normalizeMovie(m) {
+  const rating = m.ageRating ?? m.age_rating ?? m.rating;
   return {
     id: m.id,
     slug: m.slug ?? null,
     title: m.title ?? m.name,
-    description: m.description ?? m.synopsis ?? m.overview ?? '',
-    poster: m.poster ?? m.poster_url ?? m.posterUrl ?? m.image ?? null,
+    kind: m.kind ?? null,
+    description: m.synopsis ?? m.description ?? m.overview ?? '',
+    poster: m.posterUrl ?? m.poster ?? m.poster_url ?? m.image ?? null,
     backdrop:
-      m.backdrop ?? m.backdrop_url ?? m.banner ?? m.backdropUrl ?? m.cover ??
-      m.poster_url ?? m.poster ?? null,
+      m.backdropUrl ?? m.backdrop ?? m.backdrop_url ?? m.banner ?? m.cover ??
+      m.posterUrl ?? m.poster ?? null,
     genres: labels(m.genres ?? (m.genre ? [m.genre] : [])),
-    duration: m.duration ?? m.durationMinutes ?? m.runtime ?? null,
-    // object { code, minAge, description } -> "16+"
-    ageRating: label(m.ageRating ?? m.age_rating ?? m.rating),
-    ageMin: (m.ageRating ?? m.age_rating ?? m.rating)?.minAge ?? null,
+    duration: m.runtimeMinutes ?? m.duration ?? m.durationMinutes ?? m.runtime ?? null,
+    ageRating: label(rating),
+    ageMin: rating?.minAge ?? null,
+    ageDescription: rating?.description ?? '',
     formats: labels(m.formats ?? (m.format ? [m.format] : [])),
     languages: labels(m.languages ?? (m.language ? [m.language] : [])),
-    minPrice: m.minPrice ?? m.fromPrice ?? m.priceFrom ?? m.price ?? null,
+    minPrice: m.fromPrice ?? m.minPrice ?? m.priceFrom ?? m.price ?? null,
     releaseDate: m.releaseDate ?? m.release_date ?? null,
+    isComingSoon: Boolean(m.isComingSoon),
+    isNotified: Boolean(m.isNotified),
+    director: m.director ?? '',
+    cast: m.cast ?? '',
+    availableDates: m.availableDates ?? [],
   };
+}
+
+// ...existing getFeatured / getNowPlaying / getComingSoon stay as they are
+
+export async function getMovie(slug) {
+  // silent: a stale token must not log the user out on a public page
+  const res = await api(`/movies/${slug}`, { silent: true });
+  return normalizeMovie(res.data ?? res);
+}
+
+// ASSUMED path. Check the real one in Swagger.
+export function subscribeMovie(slug) {
+  return api(`/movies/${slug}/notify`, { method: 'POST' });
 }
 
 const list = (res) => (Array.isArray(res) ? res : res.data ?? []).map(normalizeMovie);

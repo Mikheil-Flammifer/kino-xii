@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom';
+import { moviePath } from '../utils/paths';
 
 export default function CardSmall({ movie }) {
   const img = movie.poster ?? movie.backdrop;
   return (
     <Link
-      to={`/movies/${movie.id}`}
+      to={moviePath(movie)}
       className="flex h-[87px] min-w-0 items-center gap-3 rounded-2xl bg-surface p-[10px] transition hover:brightness-110"
     >
       <img

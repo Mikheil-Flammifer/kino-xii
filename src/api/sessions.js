@@ -51,6 +51,7 @@ export async function getSessions(params) {
   const items = flatten(rows);
 
   if (import.meta.env.DEV) console.log('sessions sample:', rows[0], '->', items[0]);
+  
 
   return {
     items,
@@ -58,4 +59,14 @@ export async function getSessions(params) {
     lastPage: meta.last_page ?? meta.lastPage ?? 1,
     total: meta.total ?? items.length,
   };
+}
+
+// Sessions of one film on one date, grouped by venue
+export async function getMovieSessions(slug, date) {
+  const res = await api(`/movies/${slug}/sessions?date=${date}`, { auth: false });
+  const rows = Array.isArray(res) ? res : res.data ?? [];
+  return rows.map((g) => ({
+    venue: { id: g.venue?.id, name: label(g.venue), city: g.venue?.city ?? null },
+    sessions: (g.sessions ?? []).map((s) => normalizeSession(s, g)),
+  }));
 }

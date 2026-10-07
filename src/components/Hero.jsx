@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Clock3, Play } from 'lucide-react';
 import { getFeatured } from '../api/movies';
 import Button from './Button';
+import { moviePath } from '../utils/paths';
 
 const MAX_SLIDES = 4;
 const AUTO_MS = 5000; // set to 0 to turn auto-advance off
@@ -57,7 +58,7 @@ export default function Hero() {
   }
 
   const movie = movies[activeIndex];
-  const openMovie = () => navigate(`/movies/${movie.id}`);
+  const openMovie = () => navigate(moviePath(movie));
 
   return (
     <section

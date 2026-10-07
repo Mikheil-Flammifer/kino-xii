@@ -8,6 +8,7 @@ import Button from '../components/Button';
 import CardSkeleton from '../components/CardSkeleton';
 import FilterSidebar from '../components/FilterSidebar';
 import Footer from '../components/Footer';
+import { moviePath } from '../utils/paths';
 
 const MULTI = ['venue', 'format', 'language', 'time_band'];
 const FILMS_PER_PAGE = 10;
@@ -302,7 +303,7 @@ export default function Sessions() {
                         <div className="flex flex-wrap gap-3">
                           {g.items.map((s) => (
                             // Seat selection comes later; for now open the movie page
-                            <SessionCard key={s.id} s={s} onOpen={() => navigate(`/movies/${g.movie.id}`)} />
+                            <SessionCard key={s.id} s={s} onOpen={() =>navigate(moviePath(g.movie))} />
                           ))}
                         </div>
                       </div>

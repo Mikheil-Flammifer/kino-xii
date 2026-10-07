@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import Button from './Button';
+import { moviePath } from '../utils/paths';
 
 export default function CardBig({ movie, onSelectSeats }) {
   const navigate = useNavigate();
@@ -9,11 +10,11 @@ export default function CardBig({ movie, onSelectSeats }) {
 
   // Seat modal comes later; until then go to the detail page
   const handleSelect = () =>
-    onSelectSeats ? onSelectSeats(movie) : navigate(`/movies/${movie.id}`);
+    onSelectSeats ? onSelectSeats(movie) : navigate(moviePath(movie));
 
   return (
     <article className="flex h-[452px] flex-col gap-[10px] rounded-[20px] bg-surface p-3 shadow-[0_1px_4px_rgba(0,0,0,0.2)]">
-      <Link to={`/movies/${movie.id}`} className="block h-[300px] shrink-0">
+      <Link to={moviePath(movie)} className="block h-[300px] shrink-0">
         <img
           src={movie.poster}
           alt={movie.title}
@@ -24,7 +25,7 @@ export default function CardBig({ movie, onSelectSeats }) {
       <div className="flex flex-1 flex-col justify-between">
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 flex-col gap-[7px]">
-            <Link to={`/movies/${movie.id}`}>
+            <Link to={moviePath(movie)}>
               <h3 className="truncate text-[18px] leading-[20px] font-extrabold uppercase">
                 {movie.title}
               </h3>

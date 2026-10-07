@@ -1,0 +1,1 @@
+export const moviePath = (m) => `/movies/${m.slug}`;
