@@ -12,6 +12,7 @@ import CardSkeleton from '../components/CardSkeleton';
 import Footer from '../components/Footer';
 import Modal from '../components/Modal';
 import TicketCard from '../components/TicketCard';
+import SeatModal from '../components/SeatModal';
 
 const hallLabel = (h) => (!h ? 'Hall' : /^hall/i.test(h) ? h : `Hall ${h}`);
 
@@ -312,13 +313,12 @@ export default function MovieDetail() {
 
       {/* Placeholder until the seat modal is built */}
       {seatSession && !blocked && (
-        <Modal
-          title="Select seats"
-          subtitle={`${movie.title} · ${seatSession.time}`}
+        <SeatModal
+          session={seatSession}
+          movie={movie}
           onClose={() => setSeatSession(null)}
-        >
-          <p className="text-[14px] text-muted">Seat selection is the next step.</p>
-        </Modal>
+          onBooked={sessionsQ.reload}
+        />
       )}
     </>
   );

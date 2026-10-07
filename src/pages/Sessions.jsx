@@ -1,33 +1,23 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Armchair, Check, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { getFilterOptions } from '../api/filters';
 import { getSessions } from '../api/sessions';
+import { useAuth } from '../context/AuthContext';
 import { useAsync } from '../hooks/useAsync';
+import { nextSevenDays } from '../utils/dates';
+import { moviePath } from '../utils/paths';
 import Button from '../components/Button';
 import CardSkeleton from '../components/CardSkeleton';
 import FilterSidebar from '../components/FilterSidebar';
 import Footer from '../components/Footer';
-import { moviePath } from '../utils/paths';
+import SeatModal from '../components/SeatModal';
+import SessionCard from '../components/SessionCard';
 
 const MULTI = ['venue', 'format', 'language', 'time_band'];
-const FILMS_PER_PAGE = 10;
-const LOW_SEATS = 10;
 const EMPTY = { venues: [], formats: [], languages: [], timeBands: [], sorts: [] };
 
-const pad = (n) => String(n).padStart(2, '0');
-
-function nextSevenDays() {
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    return {
-      iso: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-      weekday: d.toLocaleDateString('en-GB', { weekday: 'short' }),
-      day: d.getDate(),
-    };
-  });
-}
+const Divider = () => <div className="h-px w-full bg-line" />;
 
 function pageList(current, last) {
   if (last <= 7) return Array.from({ length: last }, (_, i) => i + 1);
@@ -42,65 +32,14 @@ function pageList(current, last) {
   return out;
 }
 
-/* ---------- small pieces ---------- */
-
-
-
-const Divider = () => <div className="h-px w-full bg-line" />;
-
-function SessionCard({ s, onOpen }) {
-  const low = s.seatsLeft != null && s.seatsLeft <= LOW_SEATS;
-  const place = [s.venue, s.hall && `Hall ${s.hall}`].filter(Boolean).join(' · ');
-
-  return (
-    <button
-      type="button"
-      disabled={s.isSoldOut}
-      onClick={onOpen}
-      className={`flex h-[104px] w-[252px] flex-col justify-between rounded-2xl bg-surface p-[15px] text-left transition ${
-        s.isSoldOut ? 'cursor-not-allowed opacity-40' : 'cursor-pointer hover:brightness-125'
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[18px] leading-[20px] font-extrabold">{s.time || '--:--'}</span>
-        <span className="rounded-full bg-line px-[10px] py-[5px] text-[12px] leading-[13px] font-semibold uppercase">
-          {s.format || 'Standard'}
-        </span>
-      </div>
-
-      <div className="flex items-end gap-2">
-        <div className="flex min-w-0 flex-1 flex-col gap-[10px]">
-          <span className="truncate text-[12px] leading-4 text-muted">{s.language || '—'}</span>
-          <span className="truncate text-[12px] leading-[13px] font-semibold">{place || '—'}</span>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-[10px]">
-          {s.isSoldOut ? (
-            <span className="text-[12px] leading-4 text-muted">Sold out</span>
-          ) : (
-            s.seatsLeft != null && (
-              <span className={`flex items-center gap-1 text-[12px] leading-4 ${low ? 'text-accent' : 'text-success'}`}>
-                <Armchair size={12} />
-                {s.seatsLeft} left
-              </span>
-            )
-          )}
-          {s.price != null && (
-            <span className="text-[14px] leading-[15px] font-extrabold">from ₾{s.price}</span>
-          )}
-        </div>
-      </div>
-    </button>
-  );
-}
-
-/* ---------- page ---------- */
-
 export default function Sessions() {
   const navigate = useNavigate();
+  const { requireAuth } = useAuth();
   const [params, setParams] = useSearchParams();
   const filters = useAsync(getFilterOptions);
   const o = filters.status === 'ready' ? filters.data : EMPTY;
   const days = useMemo(nextSevenDays, []);
+  const [booking, setBooking] = useState(null); // { session, movie }
 
   const read = (k) => (params.get(k) ?? '').split(',').filter(Boolean);
   const date = params.get('date') || days[0].iso; // default: today
@@ -108,7 +47,7 @@ export default function Sessions() {
   const sort = params.get('sort') ?? '';
   const page = Number(params.get('page')) || 1;
 
-  // No `replace`: every change is a history entry, so Back restores the previous filters.
+  // No `replace`: every change is a history entry, so Back restores the previous view.
   // Any change except the page itself returns to page 1.
   const update = useCallback(
     (changes) =>
@@ -127,25 +66,22 @@ export default function Sessions() {
     if (!picked.length || picked.some((v) => !v.formats)) return null;
     return new Set(picked.flatMap((v) => v.formats));
   };
-  const allowedFormats = formatsFor(read('venue'));
-  const formatOptions = allowedFormats ? o.formats.filter((f) => allowedFormats.has(f.value)) : o.formats;
+  const allowed = formatsFor(read('venue'));
+  const formatOptions = allowed ? o.formats.filter((f) => allowed.has(f.value)) : o.formats;
 
   const toggle = (key, value) => {
     const cur = read(key);
     const next = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value];
     const changes = { [key]: next.join(',') };
-
-    // Dropping a venue can make a selected format unavailable: remove it too
     if (key === 'venue') {
-      const allowed = formatsFor(next);
-      if (allowed) changes.format = read('format').filter((f) => allowed.has(f)).join(',');
+      const a = formatsFor(next);
+      if (a) changes.format = read('format').filter((f) => a.has(f)).join(','); // drop formats the venues lack
     }
     update(changes);
   };
 
   const activeCount = MULTI.reduce((n, k) => n + read(k).length, 0); // date is not counted
-  // Clears everything except the date
-  const clearAll = () => setParams({ date }, {});
+  const clearAll = () => setParams({ date }); // clears everything except the date
 
   const query = {
     search,
@@ -162,26 +98,11 @@ export default function Sessions() {
   const sessions = useAsync(fetchSessions);
   const ready = sessions.status === 'ready';
 
-  // Group by movie; paginate 10 films per page (client-side if the API returns everything)
-  const { pageGroups, lastPage, total } = useMemo(() => {
-    if (!ready) return { pageGroups: [], lastPage: 1, total: 0 };
-    const map = new Map();
-    sessions.data.items.forEach((s) => {
-      if (!map.has(s.movie.id)) map.set(s.movie.id, { movie: s.movie, items: [] });
-      map.get(s.movie.id).items.push(s);
-    });
-    const all = [...map.values()];
-    const serverPaged = sessions.data.lastPage > 1;
-    if (serverPaged) {
-      return { pageGroups: all, lastPage: sessions.data.lastPage, total: sessions.data.total };
-    }
-    return {
-      pageGroups: all.slice((page - 1) * FILMS_PER_PAGE, page * FILMS_PER_PAGE),
-      lastPage: Math.max(1, Math.ceil(all.length / FILMS_PER_PAGE)),
-      total: sessions.data.items.length,
-    };
-  }, [ready, sessions.data, page]);
+  const groups = ready ? sessions.data.groups : [];
+  const total = ready ? sessions.data.total : 0;
+  const lastPage = ready ? sessions.data.lastPage : 1;
 
+  const open = (s, movie) => requireAuth(() => setBooking({ session: s, movie }));
 
   return (
     <>
@@ -192,28 +113,26 @@ export default function Sessions() {
         </div>
 
         <div className="flex items-start gap-[51px]">
-          {/* ---------- Filter sidebar (sticky) ---------- */}
-            <FilterSidebar
-              options={o}
-              formatOptions={formatOptions}
-              loading={filters.status === 'loading'}
-              error={filters.status === 'error'}
-              onRetry={filters.reload}
-              days={days}
-              date={date}
-              selected={{
-                venue: read('venue'),
-                format: read('format'),
-                language: read('language'),
-                time_band: read('time_band'),
-              }}
-              onToggle={toggle}
-              onDate={(iso) => update({ date: iso })}
-              activeCount={activeCount}
-              onClear={clearAll}
-            />
+          <FilterSidebar
+            options={o}
+            formatOptions={formatOptions}
+            loading={filters.status === 'loading'}
+            error={filters.status === 'error'}
+            onRetry={filters.reload}
+            days={days}
+            date={date}
+            selected={{
+              venue: read('venue'),
+              format: read('format'),
+              language: read('language'),
+              time_band: read('time_band'),
+            }}
+            onToggle={toggle}
+            onDate={(iso) => update({ date: iso })}
+            activeCount={activeCount}
+            onClear={clearAll}
+          />
 
-          {/* ---------- Results ---------- */}
           <section className="flex min-w-0 flex-1 flex-col items-center gap-[52px]">
             <div className="flex w-full flex-col gap-6">
               <div className="flex items-center justify-between">
@@ -226,15 +145,11 @@ export default function Sessions() {
                     <span className="leading-[18px] text-muted">Sort:</span>
                     <select
                       value={sort || o.sorts[0].value}
-                      onChange={(e) =>
-                        update({ sort: e.target.value === o.sorts[0].value ? '' : e.target.value })
-                      }
+                      onChange={(e) => update({ sort: e.target.value === o.sorts[0].value ? '' : e.target.value })}
                       className="cursor-pointer appearance-none bg-transparent pr-6 text-[14px] leading-[15px] font-extrabold outline-none [&>option]:bg-surface"
                     >
                       {o.sorts.map((x) => (
-                        <option key={x.value} value={x.value}>
-                          {x.label}
-                        </option>
+                        <option key={x.value} value={x.value}>{x.label}</option>
                       ))}
                     </select>
                     <ChevronDown size={16} className="pointer-events-none absolute right-0" />
@@ -268,24 +183,26 @@ export default function Sessions() {
                 </div>
               )}
 
-              {ready && pageGroups.length === 0 && (
+              {ready && groups.length === 0 && (
                 <div className="flex flex-col items-center gap-3 py-16">
                   <p className="text-muted">No sessions found</p>
                   {activeCount > 0 && (
-                    <Button variant="glass" onClick={clearAll}>
-                      Clear All Filters
-                    </Button>
+                    <Button variant="glass" onClick={clearAll}>Clear All Filters</Button>
                   )}
                 </div>
               )}
 
-              {ready && pageGroups.length > 0 && (
+              {ready && groups.length > 0 && (
                 <div className="flex flex-col gap-8">
-                  {pageGroups.map((g, i) => (
+                  {groups.map((g, i) => (
                     <div key={g.movie.id} className="flex flex-col gap-8">
                       {i > 0 && <Divider />}
                       <div className="flex flex-col gap-[14px]">
-                        <div className="flex items-center gap-4">
+                        <button
+                          type="button"
+                          onClick={() => navigate(moviePath(g.movie))}
+                          className="flex w-fit cursor-pointer items-center gap-4 text-left"
+                        >
                           <img src={g.movie.poster} alt="" className="h-20 w-14 shrink-0 rounded-lg object-cover" />
                           <div className="flex min-w-0 items-center gap-3">
                             <h3 className="truncate text-[18px] leading-[20px] font-extrabold">{g.movie.title}</h3>
@@ -298,12 +215,11 @@ export default function Sessions() {
                               <span className="text-[14px] leading-[18px] text-muted">{g.movie.duration} min</span>
                             )}
                           </div>
-                        </div>
+                        </button>
 
                         <div className="flex flex-wrap gap-3">
                           {g.items.map((s) => (
-                            // Seat selection comes later; for now open the movie page
-                            <SessionCard key={s.id} s={s} onOpen={() =>navigate(moviePath(g.movie))} />
+                            <SessionCard key={s.id} s={s} onOpen={() => open(s, g.movie)} />
                           ))}
                         </div>
                       </div>
@@ -313,7 +229,6 @@ export default function Sessions() {
               )}
             </div>
 
-            {/* Pagination */}
             {ready && lastPage > 1 && (
               <div className="flex flex-col items-center gap-3">
                 <nav className="flex items-center gap-2" aria-label="Pagination">
@@ -355,15 +270,22 @@ export default function Sessions() {
                     <ChevronRight size={16} />
                   </button>
                 </nav>
-                <p className="text-[12px] leading-4 text-muted">
-                  Page {page} of {lastPage}
-                </p>
+                <p className="text-[12px] leading-4 text-muted">Page {page} of {lastPage}</p>
               </div>
             )}
           </section>
         </div>
       </div>
       <Footer />
+
+      {booking && (
+        <SeatModal
+          session={booking.session}
+          movie={booking.movie}
+          onClose={() => setBooking(null)}
+          onBooked={sessions.reload}
+        />
+      )}
     </>
   );
 }

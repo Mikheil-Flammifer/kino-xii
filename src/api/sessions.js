@@ -1,72 +1,71 @@
 import { api } from './client';
 import { label, normalizeMovie } from './movies';
 
-const pad = (n) => String(n).padStart(2, '0');
-
-// "2026-10-07T22:00:00+00:00" -> "22:00" (read as written, no timezone shift)
+// "2026-10-06T10:00:00+00:00" -> "10:00" (fallback if `time` is missing)
 const timeFrom = (iso) => {
   const m = typeof iso === 'string' && iso.match(/T(\d{2}):(\d{2})/);
   return m ? `${m[1]}:${m[2]}` : '';
 };
 
 // The ONLY place that knows session field names
-export function normalizeSession(s, parent = {}) {
-  const startsAt = s.startsAt ?? s.starts_at ?? s.startTime ?? s.start_time ?? null;
-  const venue = s.venue ?? s.hall?.venue ?? parent.venue ?? null;
-  const hall = s.hall?.name ?? s.hall ?? null;
-
+export function normalizeSession(s, parentMovie) {
+  const hall = typeof s.hall === 'object' ? s.hall?.name : s.hall;
   return {
     id: s.id,
-    movie: normalizeMovie(s.movie ?? parent.movie ?? {}),
-    startsAt,
-    date: s.date ?? (startsAt ? String(startsAt).slice(0, 10) : null),
-    time: s.time ?? timeFrom(startsAt),
-    timeBand: s.timeBand ?? s.time_band ?? null,
-    venue: label(venue),
-    hall: typeof hall === 'string' || typeof hall === 'number' ? String(hall) : label(hall),
+    movie: normalizeMovie(s.movie ?? parentMovie ?? {}),
+    startsAt: s.startsAt ?? null,
+    date: s.date ?? (s.startsAt ? String(s.startsAt).slice(0, 10) : null),
+    time: s.time ?? timeFrom(s.startsAt),
+    timeBand: s.timeBand ?? null,
+    venue: label(s.venue ?? s.hall?.venue),
+    hall: hall != null ? String(hall) : null,
     format: label(s.format),
     language: label(s.language),
     languageCode: s.language?.code ?? null,
-    price: s.price ?? s.fromPrice ?? null,
-    seatsLeft: s.seatsLeft ?? s.seats_left ?? s.availableSeats ?? null,
-    isSoldOut: Boolean(s.isSoldOut ?? s.is_sold_out ?? s.seatsLeft === 0),
+    price: s.price ?? null,
+    seatsLeft: s.seatsLeft ?? null,
+    isSoldOut: Boolean(s.isSoldOut),
   };
 }
 
-// Accepts a flat list OR groups like { movie|venue, sessions: [...] }
-function flatten(rows) {
-  return rows.flatMap((r) =>
-    Array.isArray(r.sessions) ? r.sessions.map((s) => normalizeSession(s, r)) : [normalizeSession(r)]
-  );
-}
+// Our URL names -> API array params
+const ARRAYS = { venue: 'venues[]', format: 'formats[]', language: 'languages[]', time_band: 'bands[]' };
 
 export async function getSessions(params) {
   const qs = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
-    if (v !== '' && v != null) qs.set(k, v);
+    if (v === '' || v == null) return;
+    if (ARRAYS[k]) String(v).split(',').filter(Boolean).forEach((x) => qs.append(ARRAYS[k], x));
+    else qs.set(k, v);
   });
-  const res = await api(`/sessions${qs.size ? `?${qs}` : ''}`, { auth: false });
-  const rows = Array.isArray(res) ? res : res.data ?? [];
-  const meta = res.meta ?? {};
-  const items = flatten(rows);
 
-  if (import.meta.env.DEV) console.log('sessions sample:', rows[0], '->', items[0]);
-  
+  const res = await api(`/sessions${qs.size ? `?${qs}` : ''}`, { auth: false });
+  const meta = res.meta ?? {};
+  const groups = (res.data ?? []).map((g) => ({
+    movie: normalizeMovie(g.movie),
+    items: (g.sessions ?? []).map((s) => normalizeSession(s, g.movie)),
+  }));
 
   return {
-    items,
-    page: meta.current_page ?? meta.currentPage ?? 1,
-    lastPage: meta.last_page ?? meta.lastPage ?? 1,
-    total: meta.total ?? items.length,
+    groups,
+    page: meta.currentPage ?? 1,
+    lastPage: meta.lastPage ?? 1,
+    total: meta.totalSessions ?? groups.reduce((n, g) => n + g.items.length, 0),
+    totalMovies: meta.totalMovies ?? groups.length,
   };
 }
 
-// Sessions of one film on one date, grouped by venue
+// One session (the booking modal header)
+export async function getSession(id) {
+  const res = await api(`/sessions/${id}`, { auth: false });
+  return normalizeSession(res.data ?? res);
+}
+
+// One film's sessions on one date, grouped by venue
 export async function getMovieSessions(slug, date) {
   const res = await api(`/movies/${slug}/sessions?date=${date}`, { auth: false });
-  const rows = Array.isArray(res) ? res : res.data ?? [];
-  return rows.map((g) => ({
+  return (res.data ?? []).map((g) => ({
     venue: { id: g.venue?.id, name: label(g.venue), city: g.venue?.city ?? null },
-    sessions: (g.sessions ?? []).map((s) => normalizeSession(s, g)),
+    sessions: (g.sessions ?? []).map((s) => normalizeSession(s)),
   }));
 }

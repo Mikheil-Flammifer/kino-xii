@@ -1,42 +1,52 @@
 import { api } from './client';
-import { label } from './movies';
 
-// Display-only fallback if the API sends no hint for a time band
-const BAND_HINT = { morning: 'before 12:00', afternoon: '12:00–18:00', evening: 'after 18:00' };
+const slugOf = (x) => String(x?.slug ?? x?.id ?? x?.code ?? x);
 
-// "Drama" | { slug, name, city } ... -> { value, label, hint }
-const slugOf = (x) => String(x?.slug ?? x?.id ?? x?.code ?? x?.value ?? x);
+const opt = (v) => ({
+  value: slugOf(v),
+  label: v.name ?? v.label ?? slugOf(v),
+  hint: v.city ?? '',
+  // venues only: formats this venue can show (null = unknown, show all)
+  formats: Array.isArray(v.formats) ? v.formats.map(slugOf) : null,
+});
 
-const opt = (v) => {
-  if (v == null) return null;
-  if (typeof v !== 'object') {
-    return { value: String(v), label: String(v), hint: BAND_HINT[v] ?? '', formats: null };
-  }
-  const value = v.slug ?? v.id ?? v.code ?? v.value ?? v.key;
-  if (value == null) return null;
+// "Morning (before 12:00)" -> label "Morning", hint "before 12:00"
+const band = (v) => {
+  const m = String(v.label ?? v.id).match(/^(.*?)\s*\((.*)\)$/);
   return {
-    value: String(value),
-    label: label(v) ?? String(value),
-    hint: v.city ?? v.hint ?? v.description ?? BAND_HINT[value] ?? '',
-    // venues only: which formats this venue offers (null = unknown, show all)
-    formats: Array.isArray(v.formats) ? v.formats.map(slugOf) : null,
+    value: String(v.id),
+    label: m ? m[1] : v.label,
+    hint: m ? m[2].replace(' - ', '–') : '',
+    formats: null,
   };
 };
-const opts = (arr) => (Array.isArray(arr) ? arr.map(opt).filter(Boolean) : []);
+
+const sort = (v) => ({ value: String(v.id), label: v.label });
+
+const ticket = (t) => ({
+  id: t.id,
+  value: t.slug,
+  label: t.name,
+  ratio: t.priceRatio ?? 1,
+  note: t.note ?? '',
+  blockedFromAge: t.blockedFromRatingAge ?? null,
+});
+
+const list = (arr, fn) => (Array.isArray(arr) ? arr.map(fn) : []);
 
 // The ONLY place that knows filter-options field names
 function normalize(res) {
   const d = res.data ?? res;
   return {
-    venues: opts(d.venues),
-    formats: opts(d.formats),
-    languages: opts(d.languages),
-    timeBands: opts(d.timeBands ?? d.time_bands),
-    sorts: opts(d.sorts ?? d.sortOptions ?? d.sort_options),
-    ticketTypes: opts(d.ticketTypes ?? d.ticket_types),
-    ageRatings: d.ageRatings ?? d.age_ratings ?? [],
-    maxSeats: d.maxSeats ?? d.max_seats ?? 3,
-    holdMinutes: d.holdMinutes ?? d.hold_minutes ?? 8,
+    venues: list(d.venues, opt),
+    formats: list(d.formats, opt),
+    languages: list(d.languages, opt),
+    timeBands: list(d.timeBands, band),
+    sorts: list(d.sorts, sort),
+    ticketTypes: list(d.ticketTypes, ticket),
+    ageRatings: d.ageRatings ?? [],
+    maxSeats: d.maxSeatsPerOrder ?? 3,
+    holdMinutes: d.holdMinutes ?? 8,
   };
 }
 
