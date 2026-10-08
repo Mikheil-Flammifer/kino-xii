@@ -11,7 +11,7 @@ import Button from '../components/Button';
 import CardSkeleton from '../components/CardSkeleton';
 import FilterSidebar from '../components/FilterSidebar';
 import Footer from '../components/Footer';
-import SeatModal from '../components/SeatModal';
+import SeatModal from '../modals/SeatModal';
 import SessionCard from '../components/SessionCard';
 
 const MULTI = ['venue', 'format', 'language', 'time_band'];

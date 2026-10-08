@@ -8,10 +8,14 @@ import { getSession } from '../api/sessions';
 import { useAuth } from '../context/AuthContext';
 import { useAsync } from '../hooks/useAsync';
 import { mmss, useCountdown } from '../hooks/useCountdown';
-import Button from './Button';
+import Button from '../components/Button';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const FALLBACK_TYPES = [{ id: 1, value: 'adult', label: 'Adult', ratio: 1, blockedFromAge: null }];
+const FALLBACK_TYPES = [
+  { id: 1, value: 'child', label: 'Child', ratio: 0.6, blockedFromAge: null },
+  { id: 2, value: 'student', label: 'Student', ratio: 0.75, blockedFromAge: null },
+  { id: 3, value: 'adult', label: 'Adult', ratio: 1, blockedFromAge: null },
+];
 
 const fmtDay = (iso, opts) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', opts) : '');
 const longDay = (iso) => fmtDay(iso, { weekday: 'long', day: 'numeric', month: 'long' });
@@ -31,11 +35,12 @@ const rules = {
   cvv: (v) => (!/^\d{3,4}$/.test(v) ? '3 digits' : ''),
 };
 
+/* Figma input: label 12/13 semibold, gap 12, input h-44 px-16 r-12 bg #1E2031, text 14/15 semibold */
 function Field({ label, value, onChange, onBlur, error, valid, placeholder, inputMode, className = '' }) {
   return (
-    <div className={`flex flex-col gap-[10px] ${className}`}>
+    <div className={`flex flex-col gap-3 ${className}`}>
       <label className="text-[12px] leading-[13px] font-semibold">{label}</label>
-      <div className={`flex h-10 items-center justify-between rounded-xl bg-surface px-4 ${error ? 'ring-1 ring-accent' : ''}`}>
+      <div className={`flex h-11 items-center justify-between rounded-xl bg-surface px-4 ${error ? 'ring-1 ring-accent' : ''}`}>
         <input
           value={value}
           onChange={onChange}
@@ -43,7 +48,7 @@ function Field({ label, value, onChange, onBlur, error, valid, placeholder, inpu
           placeholder={placeholder}
           inputMode={inputMode}
           aria-invalid={Boolean(error)}
-          className="w-full bg-transparent text-[12px] leading-[13px] font-semibold outline-none placeholder:text-muted"
+          className="w-full bg-transparent text-[14px] leading-[15px] font-semibold outline-none placeholder:text-muted"
         />
         {valid && !error && <Check size={16} className="shrink-0 text-success" />}
       </div>
@@ -114,7 +119,10 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
   const holdMinutes = opts.status === 'ready' ? opts.data.holdMinutes : 8;
   const types = opts.status === 'ready' && opts.data.ticketTypes.length ? opts.data.ticketTypes : FALLBACK_TYPES;
   const isBlocked = (t) => t.blockedFromAge != null && (movie?.ageMin ?? 0) >= t.blockedFromAge;
-  const defaultType = (types.find((t) => !isBlocked(t)) ?? types[0]).value;
+  // Figma order: lowest ratio first (Child 60 · Student 75 · Adult 100)
+  const sortedTypes = [...types].sort((a, b) => (a.ratio ?? 1) - (b.ratio ?? 1));
+  // Default = the highest-ratio type that isn't blocked (Adult)
+  const defaultType = ([...sortedTypes].reverse().find((t) => !isBlocked(t)) ?? types[0]).value;
 
   /* ----- fresh session details for the header ----- */
   const fetchSession = useCallback(() => getSession(initial.id), [initial.id]);
@@ -192,6 +200,7 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
       return [...cur, { seat, type: defaultType }];
     });
   };
+  const removeSeat = (id) => setSelected((cur) => cur.filter((s) => s.seat.id !== id));
   const setType = (id, type) => setSelected((cur) => cur.map((s) => (s.seat.id === id ? { ...s, type } : s)));
 
   // Someone else got the seats: mark them taken, keep the rest, refresh the map
@@ -223,6 +232,11 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
     } finally {
       setBusy(false);
     }
+  };
+
+  const backToSeats = () => {
+    setStep('seats');
+    setHold(null);
   };
 
   /* ----- checkout form ----- */
@@ -289,37 +303,147 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
     .filter(Boolean)
     .join(' · ');
   const codes = selected.map((s) => s.seat.code).join(', ');
+  const cardMeta = [session.hall && `Hall ${session.hall}`, shortDay(session.date), session.time].filter(Boolean).join(' · ');
 
+  /* Progress: container bg #1E2031, active segment #EC3013. "Seats" is clickable from checkout. */
   const progress = (
     <div className="flex gap-2 rounded-full bg-surface">
-      {['Seats', 'Checkout'].map((label, i) => {
-        const active = (step === 'seats' && i === 0) || (step === 'checkout' && i === 1);
+      {[
+        { key: 'seats', label: 'Seats' },
+        { key: 'checkout', label: 'Checkout' },
+      ].map(({ key, label }) => {
+        const active = step === key;
+        const clickable = key === 'seats' && step === 'checkout';
         return (
-          <div
-            key={label}
-            className={`flex h-[33px] flex-1 items-center justify-center rounded-full px-4 text-[12px] leading-[13px] font-semibold uppercase ${active ? 'bg-accent' : ''}`}
+          <button
+            key={key}
+            type="button"
+            disabled={!clickable}
+            onClick={clickable ? backToSeats : undefined}
+            className={`flex h-[33px] flex-1 items-center justify-center rounded-full px-4 py-[10px] text-[12px] leading-[13px] font-semibold uppercase ${
+              active ? 'bg-accent' : 'bg-surface'
+            } ${clickable ? 'cursor-pointer hover:brightness-125' : 'cursor-default'}`}
           >
             {label}
-          </div>
+          </button>
         );
       })}
     </div>
   );
 
+  /* ===== Step 1, right column: "Your seats · Max N" ===== */
+  const seatsPanel = (
+    <div className="flex flex-col gap-3 self-stretch">
+      <h3 className="text-[14px] leading-[15px] font-extrabold">Your seats · Max {maxSeats}</h3>
+
+      {selected.length === 0 ? (
+        <p className="text-[12px] leading-[130%] text-muted">
+          Pick up to {maxSeats} seats from the map. Each seat can carry its own ticket type.
+        </p>
+      ) : (
+        <>
+          <ul className="flex flex-col gap-3">
+            {selected.map(({ seat, type }) => (
+              <li key={seat.id} className="flex flex-col gap-[6px] rounded-2xl bg-surface p-[15px]">
+                <div className="flex flex-col gap-3">
+                  {/* Row: Seat B3 ........ ₾16 ✕ */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[12px] leading-[130%] text-muted">Seat</span>
+                      <span className="text-[12px] leading-[13px] font-semibold">{seat.code}</span>
+                    </div>
+                    <div className="flex items-center justify-end gap-3">
+                      <span className="text-[12px] leading-[13px] font-semibold">₾{unit(type)}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeSeat(seat.id)}
+                        aria-label={`Remove seat ${seat.code}`}
+                        className="flex size-4 shrink-0 cursor-pointer items-center justify-center text-muted transition hover:text-white"
+                      >
+                        <X size={16} strokeWidth={1.5} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="h-px w-full bg-line" />
+
+                  {/* Three buttons in a row: Child 60% · Student 75% · Adult 100% */}
+                  <div className="flex gap-2">
+                    {sortedTypes.map((t) => {
+                      const active = t.value === type;
+                      const blocked = isBlocked(t);
+                      return (
+                        <button
+                          key={t.value}
+                          type="button"
+                          disabled={blocked}
+                          aria-pressed={active}
+                          title={blocked ? 'Not available for this film' : undefined}
+                          onClick={() => setType(seat.id, t.value)}
+                          className={`flex h-8 flex-1 items-center justify-center rounded-2xl py-2 text-[12px] leading-[130%] font-normal text-white transition ${
+                            active ? 'bg-accent' : 'bg-line'
+                          } ${blocked ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'} ${
+                            !active && !blocked ? 'hover:brightness-125' : ''
+                          }`}
+                        >
+                          {t.label} {Math.round((t.ratio ?? 1) * 100)}%
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {types.some((t) => t.note && selected.some((s) => s.type === t.value)) && (
+            <p className="text-[12px] leading-[130%] text-muted">
+              {types.find((t) => t.note && selected.some((s) => s.type === t.value))?.note}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+
+  /* ===== Step 2, right column: "Summary" ===== */
+  const summaryPanel = (
+    <div className="flex min-h-[351px] flex-col gap-3 self-stretch">
+      <h3 className="text-[14px] leading-[15px] font-extrabold">Summary</h3>
+      <div className="flex flex-col gap-[10px] rounded-xl bg-surface p-4">
+        <div className="flex flex-col gap-2">
+          <span className="text-[14px] leading-[15px] font-extrabold uppercase">{movie.title}</span>
+          <span className="text-[12px] leading-[130%] text-muted">{cardMeta}</span>
+        </div>
+        <div className="h-px w-full bg-line" />
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[12px] leading-[130%] text-muted">Seats</span>
+          <span className="text-right text-[12px] leading-[13px] font-semibold">{codes || '—'}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[12px] leading-[130%] text-muted">Tickets</span>
+          <span className="text-right text-[12px] leading-[130%]">{ticketSummary || '—'}</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  /* Figma Frame 220 */
   const subtotal = (
-    <div className="flex items-center px-[5px]">
-      <span className="text-[12px] leading-[13px] font-semibold">SUBTOTAL</span>
+    <div className="flex h-[26px] items-center px-[5px]">
+      <span className="text-[12px] leading-[13px] font-semibold uppercase">Subtotal</span>
       <span className="flex-1" />
       <span className="text-[24px] leading-[26px] font-extrabold">₾ {total}</span>
     </div>
   );
 
+  /* Figma Button: 41px, px 22, disabled = #505261 / #A9A9A9, enabled = #EC3013 */
   const bigButton = (label, onClick, disabled) => (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`flex h-[41px] w-full items-center justify-center rounded-full text-[14px] leading-[15px] font-extrabold transition ${
+      className={`flex h-[41px] w-full items-center justify-center gap-1 rounded-full px-[22px] py-[13px] text-[14px] leading-[15px] font-extrabold transition ${
         disabled ? 'cursor-not-allowed bg-disabled text-muted' : 'cursor-pointer bg-accent text-white hover:brightness-110'
       }`}
     >
@@ -341,48 +465,54 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
         {step === 'done' ? (
           /* ---------- Confirmation ---------- */
           <div className="mx-auto flex w-[673px] max-w-full flex-1 flex-col items-center justify-center gap-6">
-            <div className="flex flex-col items-center gap-4">
-              <span className="flex size-14 items-center justify-center rounded-full bg-success">
-                <Check size={32} strokeWidth={4} />
-              </span>
-              <h2 className="text-[24px] leading-[26px] font-extrabold">Booking confirmed!</h2>
-              <p className="text-center text-[14px] leading-[18px] text-muted">
-                Your tickets are ready. We've sent the confirmation to your email.
-              </p>
-              {order?.code && (
-                <span className="rounded-full bg-line px-4 py-[6px] text-[12px] leading-[13px] font-semibold uppercase">
-                  Order #{order.code}
+            <div className="flex w-full flex-col items-center gap-[18px]">
+              <div className="flex w-[365px] max-w-full flex-col items-center gap-4">
+                <span className="flex size-14 items-center justify-center rounded-full bg-success p-4">
+                  <Check size={32} strokeWidth={4} className="text-white" />
                 </span>
-              )}
-            </div>
-
-            <div className="flex w-full flex-col gap-3 rounded-xl bg-surface p-5">
-              <div className="flex gap-[10px]">
-                {movie.poster && <img src={movie.poster} alt="" className="h-16 w-12 rounded-lg object-cover" />}
-                <div className="flex flex-col gap-2">
-                  <span className="text-[14px] leading-[15px] font-extrabold">{movie.title}</span>
-                  <span className="text-[12px] leading-4 text-muted">
-                    {[session.venue, session.hall && `Hall ${session.hall}`, shortDay(session.date), session.time].filter(Boolean).join(' · ')}
-                  </span>
+                <div className="flex w-full flex-col items-center gap-4">
+                  <div className="flex w-full flex-col items-center gap-[10px]">
+                    <h2 className="text-center text-[24px] leading-[26px] font-extrabold">Booking confirmed!</h2>
+                    <p className="text-center text-[14px] leading-[130%] text-muted">
+                      Your tickets are ready. We've sent the confirmation to your email.
+                    </p>
+                  </div>
+                  {order?.code && (
+                    <span className="flex h-[26px] items-center justify-center rounded-full bg-line px-5 text-[12px] leading-[13px] font-semibold uppercase">
+                      Order #{order.code}
+                    </span>
+                  )}
                 </div>
               </div>
-              <div className="h-px bg-line" />
-              <div className="flex justify-between text-[12px] leading-4">
-                <span className="text-muted">Seats</span>
-                <span className="font-semibold">{codes}</span>
-              </div>
-              <div className="flex justify-between text-[12px] leading-4">
-                <span className="text-muted">Tickets</span>
-                <span>{ticketSummary}</span>
-              </div>
-              <div className="h-px bg-line" />
-              <div className="flex items-center justify-between">
-                <span className="text-[12px] leading-4 text-muted uppercase">Total paid</span>
-                <span className="text-[18px] leading-5 font-extrabold">₾ {order?.total}</span>
+
+              <div className="flex w-full flex-col gap-3 rounded-xl bg-surface p-5">
+                <div className="flex gap-[10px]">
+                  {movie.poster && <img src={movie.poster} alt="" className="h-16 w-12 shrink-0 rounded-lg object-cover" />}
+                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    <span className="text-[14px] leading-[15px] font-extrabold uppercase">{movie.title}</span>
+                    <span className="text-[12px] leading-[130%] text-muted">
+                      {[session.venue, session.hall && `Hall ${session.hall}`, shortDay(session.date), session.time].filter(Boolean).join(' · ')}
+                    </span>
+                  </div>
+                </div>
+                <div className="h-px w-full bg-line" />
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[12px] leading-[130%] text-muted">Seats</span>
+                  <span className="text-[12px] leading-[13px] font-semibold">{codes}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[12px] leading-[130%] text-muted">Tickets</span>
+                  <span className="text-[12px] leading-[130%]">{ticketSummary}</span>
+                </div>
+                <div className="h-px w-full bg-line" />
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] leading-[130%] text-muted uppercase">Total paid</span>
+                  <span className="text-[18px] leading-5 font-extrabold">₾ {order?.total}</span>
+                </div>
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex items-center justify-center gap-3">
               <Button size="lg" onClick={() => { onClose(); navigate('/profile?tab=tickets'); }}>
                 View my tickets
               </Button>
@@ -415,7 +545,7 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
               </button>
             </div>
 
-            <div className="flex flex-1 gap-5">
+            <div className="flex flex-1 items-stretch justify-center gap-5">
               {/* ---------- Left column ---------- */}
               <div className="flex min-w-0 flex-1 basis-[720px] flex-col gap-6">
                 {progress}
@@ -488,114 +618,49 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
                 )}
 
                 {step === 'checkout' && (
-                  <div className="flex flex-col gap-6">
+                  <div className="flex flex-col gap-5">
                     {profileIncomplete && (
                       <p role="alert" className="flex items-center gap-2 rounded-xl bg-accent/10 px-4 py-3 text-[12px] leading-4 font-semibold text-accent">
                         <Lock size={14} />
                         Complete your profile (full name, mobile number and date of birth) before booking.
                       </p>
                     )}
-                    <div className="flex flex-col gap-6">
+
+                    <div className="flex flex-col gap-[18px]">
                       <Field label="Full Name" placeholder="e.g. Jane Doe" {...bind('fullName')} />
                       <div className="flex gap-3">
                         <Field label="Email" placeholder="e.g. jane@example.com" className="flex-1" {...bind('email')} />
                         <Field label="Mobile Number" placeholder="5XX XXX XXX" inputMode="tel" className="flex-1" {...bind('mobile')} />
                       </div>
                     </div>
-                    <div className="h-px bg-surface" />
-                    <div className="flex flex-col gap-6">
+
+                    <div className="h-px w-full rounded-full bg-surface" />
+
+                    <div className="flex flex-col gap-[18px]">
                       <Field label="Card Number" placeholder="1234 5678 9012 3456" inputMode="numeric" {...bind('card', fmtCard)} />
                       <div className="flex gap-3">
                         <Field label="Expiry" placeholder="MM/YY" inputMode="numeric" className="flex-1" {...bind('expiry', fmtExpiry)} />
                         <Field label="CVV" placeholder="123" inputMode="numeric" className="flex-1" {...bind('cvv', fmtCvv)} />
                       </div>
                     </div>
+
                     {formError && <p className="text-[12px] leading-[13px] font-semibold text-accent">{formError}</p>}
                   </div>
                 )}
               </div>
 
-              <div className="w-px self-stretch bg-surface" />
+              <div className="w-px self-stretch rounded-full bg-surface" />
 
-              {/* ---------- Right column ---------- */}
-              <div className="flex w-[321px] shrink-0 flex-col justify-between gap-6">
-                {step === 'seats' ? (
-                  <>
-                    <div className="flex flex-col gap-6">
-                      <div className="flex flex-col gap-3">
-                        <h3 className="text-[14px] leading-[15px] font-extrabold">Your seats · Max {maxSeats}</h3>
-                        <p className="text-[12px] leading-4 text-muted">
-                          Pick up to {maxSeats} seats from the map. Each seat can carry its own ticket type.
-                        </p>
-                      </div>
+              {/* ---------- Right column (Figma Frame 56, 321px) ---------- */}
+              <div className="flex w-[321px] shrink-0 flex-col items-start justify-between gap-6 self-stretch">
+                <div className="flex w-full flex-col gap-6">{step === 'seats' ? seatsPanel : summaryPanel}</div>
 
-                      <ul className="flex flex-col gap-2">
-                        {selected.map(({ seat, type }) => (
-                          <li key={seat.id} className="flex items-center justify-between gap-3 rounded-xl bg-surface px-3 py-2">
-                            <span className="text-[14px] leading-[15px] font-extrabold">{seat.code}</span>
-                            <select
-                              value={type}
-                              onChange={(e) => setType(seat.id, e.target.value)}
-                              aria-label={`Ticket type for seat ${seat.code}`}
-                              className="cursor-pointer rounded-lg bg-line px-2 py-1 text-[12px] font-semibold outline-none [&>option]:bg-surface"
-                            >
-                              {types.map((t) => (
-                                <option key={t.value} value={t.value} disabled={isBlocked(t)}>
-                                  {t.label} · ₾{unit(t.value)}
-                                  {isBlocked(t) ? ' (not for this film)' : ''}
-                                </option>
-                              ))}
-                            </select>
-                          </li>
-                        ))}
-                      </ul>
-                      {types.some((t) => t.note && selected.some((s) => s.type === t.value)) && (
-                        <p className="text-[12px] leading-4 text-muted">
-                          {types.find((t) => t.note && selected.some((s) => s.type === t.value))?.note}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex flex-col gap-3 pt-[10px]">
-                      {subtotal}
-                      {bigButton(busy ? 'Holding seats…' : 'Continue to checkout', goCheckout, selected.length === 0 || busy)}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex flex-col gap-3">
-                      <h3 className="text-[14px] leading-[15px] font-extrabold">Summary</h3>
-                      <div className="flex flex-col gap-[10px] rounded-xl bg-surface p-4">
-                        <div className="flex flex-col gap-2">
-                          <span className="text-[14px] leading-[15px] font-extrabold">{movie.title}</span>
-                          <span className="text-[12px] leading-4 text-muted">
-                            {[session.hall && `Hall ${session.hall}`, shortDay(session.date), session.time].filter(Boolean).join(' · ')}
-                          </span>
-                        </div>
-                        <div className="h-px bg-line" />
-                        <div className="flex justify-between text-[12px] leading-4">
-                          <span className="text-muted">Seats</span>
-                          <span className="font-semibold">{codes || '—'}</span>
-                        </div>
-                        <div className="flex justify-between gap-3 text-[12px] leading-4">
-                          <span className="text-muted">Tickets</span>
-                          <span className="text-right">{ticketSummary || '—'}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-3 pt-[10px]">
-                      {subtotal}
-                      {bigButton(busy ? 'Processing…' : `Pay ₾ ${total}`, pay, busy || profileIncomplete)}
-                      <button
-                        type="button"
-                        onClick={() => { setStep('seats'); setHold(null); }}
-                        className="cursor-pointer text-[12px] font-semibold text-muted hover:text-white"
-                      >
-                        ← Change seats
-                      </button>
-                    </div>
-                  </>
-                )}
+                <div className="flex w-full flex-col gap-3 pt-[10px]">
+                  {subtotal}
+                  {step === 'seats'
+                    ? bigButton(busy ? 'Holding seats…' : 'Continue to checkout', goCheckout, selected.length === 0 || busy)
+                    : bigButton(busy ? 'Processing…' : `Pay ₾ ${total}`, pay, busy || profileIncomplete || !formValid)}
+                </div>
               </div>
             </div>
           </>

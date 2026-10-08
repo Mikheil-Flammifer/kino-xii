@@ -12,7 +12,7 @@ import CardSkeleton from '../components/CardSkeleton';
 import Footer from '../components/Footer';
 import Modal from '../components/Modal';
 import TicketCard from '../components/TicketCard';
-import SeatModal from '../components/SeatModal';
+import SeatModal from '../modals/SeatModal';
 
 const hallLabel = (h) => (!h ? 'Hall' : /^hall/i.test(h) ? h : `Hall ${h}`);
 
