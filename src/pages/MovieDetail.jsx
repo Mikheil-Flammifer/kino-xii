@@ -9,7 +9,6 @@ import { useRecentlyViewed } from '../hooks/useRecentlyViewed';
 import { ageFromDob, longDate, nextSevenDays } from '../utils/dates';
 import Button from '../components/Button';
 import CardSkeleton from '../components/CardSkeleton';
-import Footer from '../components/Footer';
 import Modal from '../components/Modal';
 import TicketCard from '../components/TicketCard';
 import SeatModal from '../modals/SeatModal';
@@ -308,8 +307,6 @@ export default function MovieDetail() {
           )}
         </aside>
       </div>
-
-      <Footer />
 
       {/* Placeholder until the seat modal is built */}
       {seatSession && !blocked && (

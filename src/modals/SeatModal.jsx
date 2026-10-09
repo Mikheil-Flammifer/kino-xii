@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Check, Lock, X } from 'lucide-react';
-import { contestedIds, createHold, createOrder, getSeats } from '../api/booking';
+import { contestedCodes, createHold, createOrder, fieldErrors, getSeats, releaseHold } from '../api/booking';
 import { getFilterOptions } from '../api/filters';
 import { getSession } from '../api/sessions';
 import { useAuth } from '../context/AuthContext';
@@ -16,6 +16,10 @@ const FALLBACK_TYPES = [
   { id: 2, value: 'student', label: 'Student', ratio: 0.75, blockedFromAge: null },
   { id: 3, value: 'adult', label: 'Adult', ratio: 1, blockedFromAge: null },
 ];
+
+// API field name -> our form key
+const FIELD_MAP = { fullName: 'fullName', email: 'email', mobileNumber: 'mobile', cardNumber: 'card', expiry: 'expiry', cvv: 'cvv' };
+const ALL_TOUCHED = { fullName: true, email: true, mobile: true, card: true, expiry: true, cvv: true };
 
 const fmtDay = (iso, opts) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', opts) : '');
 const longDay = (iso) => fmtDay(iso, { weekday: 'long', day: 'numeric', month: 'long' });
@@ -119,10 +123,11 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
   const holdMinutes = opts.status === 'ready' ? opts.data.holdMinutes : 8;
   const types = opts.status === 'ready' && opts.data.ticketTypes.length ? opts.data.ticketTypes : FALLBACK_TYPES;
   const isBlocked = (t) => t.blockedFromAge != null && (movie?.ageMin ?? 0) >= t.blockedFromAge;
-  // Figma order: lowest ratio first (Child 60 · Student 75 · Adult 100)
+  // Figma order: lowest ratio first (Child 60 · Student 75 · Adult 100). Blocked types (Child on 16+) are hidden.
   const sortedTypes = [...types].sort((a, b) => (a.ratio ?? 1) - (b.ratio ?? 1));
-  // Default = the highest-ratio type that isn't blocked (Adult)
-  const defaultType = ([...sortedTypes].reverse().find((t) => !isBlocked(t)) ?? types[0]).value;
+  const visibleTypes = sortedTypes.filter((t) => !isBlocked(t));
+  // Default = the highest-ratio visible type (Adult)
+  const defaultType = ([...visibleTypes].reverse()[0] ?? types[0]).value;
 
   /* ----- fresh session details for the header ----- */
   const fetchSession = useCallback(() => getSession(initial.id), [initial.id]);
@@ -131,7 +136,7 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
 
   const [step, setStep] = useState('seats'); // seats | checkout | done
   const [selected, setSelected] = useState([]); // [{ seat, type }]
-  const [taken, setTaken] = useState([]);
+  const [taken, setTaken] = useState([]); // seat CODES lost to someone else
   const [hold, setHold] = useState(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -143,8 +148,20 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
 
   const left = useCountdown(hold?.expiresAt);
 
+  /* ----- close: release a live hold unless the order is paid ----- */
+  const holdRef = useRef(null);
+  const stepRef = useRef('seats');
   useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose();
+    holdRef.current = hold;
+    stepRef.current = step;
+  });
+  const close = useCallback(() => {
+    if (holdRef.current?.id && stepRef.current !== 'done') releaseHold(holdRef.current.id);
+    onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && close();
     document.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -152,7 +169,7 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
     };
-  }, [onClose]);
+  }, [close]);
 
   // Restore seats this user already holds (isMine), once
   const restored = useRef(false);
@@ -164,15 +181,18 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seatsQ.status]);
 
-  // Hold expired -> back to step 1 with a fresh map
+  // Back to step 1 with an empty selection and a fresh map (hold expired / refused)
+  const resetToSeats = (message) => {
+    setHold(null);
+    setSelected([]);
+    setStep('seats');
+    setNotice(message);
+    seatsQ.reload();
+  };
+
+  // Countdown reached zero on checkout
   useEffect(() => {
-    if (step === 'checkout' && left === 0) {
-      setHold(null);
-      setSelected([]);
-      setStep('seats');
-      setNotice('Your hold expired. Please pick your seats again.');
-      seatsQ.reload();
-    }
+    if (step === 'checkout' && left === 0) resetToSeats('Your hold expired. Please pick your seats again.');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [left, step]);
 
@@ -203,16 +223,16 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
   const removeSeat = (id) => setSelected((cur) => cur.filter((s) => s.seat.id !== id));
   const setType = (id, type) => setSelected((cur) => cur.map((s) => (s.seat.id === id ? { ...s, type } : s)));
 
-  // Someone else got the seats: mark them taken, keep the rest, refresh the map
+  // 409: `contested` = seat codes someone else got. Mark them sold, keep the rest, refetch the map.
   const handleContested = (err) => {
-    const ids = contestedIds(err);
-    setTaken((t) => [...new Set([...t, ...ids])]);
-    setSelected((cur) => cur.filter((s) => !ids.includes(s.seat.id)));
+    const codesLost = contestedCodes(err);
+    setTaken((t) => [...new Set([...t, ...codesLost])]);
+    setSelected((cur) => cur.filter((s) => !codesLost.includes(s.seat.code)));
     setHold(null);
     setStep('seats');
     setNotice(
-      ids.length
-        ? 'Some seats were just taken by someone else. They are marked as sold; your other seats are still selected.'
+      codesLost.length
+        ? `Seat${codesLost.length > 1 ? 's' : ''} ${codesLost.join(', ')} ${codesLost.length > 1 ? 'were' : 'was'} just taken by someone else. Your other seats are still selected.`
         : err.message || 'Some seats are no longer available.'
     );
     seatsQ.reload();
@@ -222,22 +242,23 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
     setBusy(true);
     setNotice('');
     try {
-      const h = await createHold(session.id, selected.map((s) => s.seat.id));
+      const h = await createHold(
+        session.id,
+        selected.map((s) => ({ seatId: s.seat.id, ticketType: s.type }))
+      );
       const expiresAt = h.expiresAt ? new Date(h.expiresAt).getTime() : Date.now() + holdMinutes * 60000;
       setHold({ ...h, expiresAt });
       setStep('checkout');
     } catch (e) {
       if (e.status === 409) handleContested(e);
-      else setNotice(e.message || 'Could not hold your seats. Try again.');
+      else setNotice(e.message || 'Could not hold your seats. Try again.'); // 422 message shown as it comes
     } finally {
       setBusy(false);
     }
   };
 
-  const backToSeats = () => {
-    setStep('seats');
-    setHold(null);
-  };
+  // Checkout -> step 1: keep the hold (the user still wants these seats; holding again replaces it)
+  const backToSeats = () => setStep('seats');
 
   /* ----- checkout form ----- */
   const [form, setForm] = useState({
@@ -249,6 +270,7 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
     cvv: '',
   });
   const [touched, setTouched] = useState({});
+  const [serverErrors, setServerErrors] = useState({});
   const [formError, setFormError] = useState('');
   const err = (k) => rules[k](form[k]);
   const formValid = Object.keys(rules).every((k) => !err(k));
@@ -258,10 +280,11 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
     value: form[k],
     onChange: (e) => {
       setForm((f) => ({ ...f, [k]: fmt(e.target.value) }));
+      setServerErrors((s) => ({ ...s, [k]: '' }));
       setFormError('');
     },
     onBlur: () => setTouched((t) => ({ ...t, [k]: true })),
-    error: touched[k] ? err(k) : '',
+    error: (touched[k] ? err(k) : '') || serverErrors[k] || '',
     valid: Boolean(form[k]) && !err(k),
   });
   const fmtCard = (v) => v.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim();
@@ -272,27 +295,43 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
   const fmtCvv = (v) => v.replace(/\D/g, '').slice(0, 4);
 
   const pay = async () => {
-    setTouched({ fullName: true, email: true, mobile: true, card: true, expiry: true, cvv: true });
-    if (!formValid || profileIncomplete) return;
+    setTouched(ALL_TOUCHED);
+    if (!formValid || profileIncomplete || !hold?.id) return;
     setBusy(true);
     setFormError('');
+    setServerErrors({});
     try {
       const o = await createOrder({
-        sessionId: session.id,
-        holdId: hold?.id,
-        tickets: selected.map((s) => ({
-          seatId: s.seat.id,
-          ticketTypeId: types.find((t) => t.value === s.type)?.id,
-        })),
-        customer: { fullName: form.fullName.trim(), email: form.email.trim(), mobileNumber: form.mobile.replace(/\s/g, '') },
+        holdId: hold.id,
+        fullName: form.fullName.trim(),
+        email: form.email.trim(),
+        mobileNumber: form.mobile.replace(/\D/g, '').replace(/^995/, ''),
+        cardNumber: form.card,
+        expiry: form.expiry,
+        cvv: form.cvv,
       });
-      setOrder({ ...o, total: o.total ?? total });
+      setOrder(o);
       setHold(null);
       setStep('done');
       onBooked?.();
     } catch (e) {
-      if (e.status === 409) handleContested(e);
-      else setFormError(e.message || 'Payment failed. Please try again.'); // message-only 422 shown as-is
+      if (e.status === 409) {
+        handleContested(e);
+      } else if (e.status === 422) {
+        const fe = fieldErrors(e);
+        if (fe) {
+          // Field validation: map each API key onto its input
+          const mapped = {};
+          Object.entries(fe).forEach(([k, msg]) => (mapped[FIELD_MAP[k] ?? k] = msg));
+          setServerErrors(mapped);
+          setTouched(ALL_TOUCHED);
+        } else {
+          // Message only: the hold ran out
+          resetToSeats(e.message || 'Your hold time expired. Please re-select your seats.');
+        }
+      } else {
+        setFormError(e.message || 'Payment failed. Please try again.');
+      }
     } finally {
       setBusy(false);
     }
@@ -304,6 +343,24 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
     .join(' · ');
   const codes = selected.map((s) => s.seat.code).join(', ');
   const cardMeta = [session.hall && `Hall ${session.hall}`, shortDay(session.date), session.time].filter(Boolean).join(' · ');
+
+  // Confirmation is rendered from the order the server returned
+  const doneSeats = order?.seats?.length ? order.seats.join(', ') : codes;
+  const doneTickets = order?.tickets?.length
+    ? Object.entries(
+        order.tickets.reduce((acc, t) => ({ ...acc, [t.type]: (acc[t.type] ?? 0) + 1 }), {})
+      )
+        .map(([name, n]) => `${n} x ${name}`)
+        .join(', ')
+    : ticketSummary;
+  const doneMeta = [
+    order?.venue || session.venue,
+    (order?.hall || session.hall) && `Hall ${order?.hall || session.hall}`,
+    shortDay(order?.date || session.date),
+    order?.time || session.time,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   /* Progress: container bg #1E2031, active segment #EC3013. "Seats" is clickable from checkout. */
   const progress = (
@@ -367,23 +424,18 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
 
                   <div className="h-px w-full bg-line" />
 
-                  {/* Three buttons in a row: Child 60% · Student 75% · Adult 100% */}
+                  {/* Buttons in a row: Child 60% · Student 75% · Adult 100% (Child hidden on 16+) */}
                   <div className="flex gap-2">
-                    {sortedTypes.map((t) => {
+                    {visibleTypes.map((t) => {
                       const active = t.value === type;
-                      const blocked = isBlocked(t);
                       return (
                         <button
                           key={t.value}
                           type="button"
-                          disabled={blocked}
                           aria-pressed={active}
-                          title={blocked ? 'Not available for this film' : undefined}
                           onClick={() => setType(seat.id, t.value)}
-                          className={`flex h-8 flex-1 items-center justify-center rounded-2xl py-2 text-[12px] leading-[130%] font-normal text-white transition ${
-                            active ? 'bg-accent' : 'bg-line'
-                          } ${blocked ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'} ${
-                            !active && !blocked ? 'hover:brightness-125' : ''
+                          className={`flex h-8 flex-1 cursor-pointer items-center justify-center rounded-2xl py-2 text-[12px] leading-[130%] font-normal text-white transition ${
+                            active ? 'bg-accent' : 'bg-line hover:brightness-125'
                           }`}
                         >
                           {t.label} {Math.round((t.ratio ?? 1) * 100)}%
@@ -454,7 +506,7 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(16,16,16,0.3)] p-4 backdrop-blur-[5px]"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      onMouseDown={(e) => e.target === e.currentTarget && close()}
     >
       <div
         role="dialog"
@@ -463,7 +515,7 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
         className="flex max-h-[calc(100vh-32px)] min-h-[599px] w-[1146px] max-w-full flex-col gap-8 overflow-y-auto rounded-[28px] bg-bg p-8 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.2)]"
       >
         {step === 'done' ? (
-          /* ---------- Confirmation ---------- */
+          /* ---------- Confirmation (rendered from the order response) ---------- */
           <div className="mx-auto flex w-[673px] max-w-full flex-1 flex-col items-center justify-center gap-6">
             <div className="flex w-full flex-col items-center gap-[18px]">
               <div className="flex w-[365px] max-w-full flex-col items-center gap-4">
@@ -490,19 +542,17 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
                   {movie.poster && <img src={movie.poster} alt="" className="h-16 w-12 shrink-0 rounded-lg object-cover" />}
                   <div className="flex min-w-0 flex-1 flex-col gap-2">
                     <span className="text-[14px] leading-[15px] font-extrabold uppercase">{movie.title}</span>
-                    <span className="text-[12px] leading-[130%] text-muted">
-                      {[session.venue, session.hall && `Hall ${session.hall}`, shortDay(session.date), session.time].filter(Boolean).join(' · ')}
-                    </span>
+                    <span className="text-[12px] leading-[130%] text-muted">{doneMeta}</span>
                   </div>
                 </div>
                 <div className="h-px w-full bg-line" />
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[12px] leading-[130%] text-muted">Seats</span>
-                  <span className="text-[12px] leading-[13px] font-semibold">{codes}</span>
+                  <span className="text-[12px] leading-[13px] font-semibold">{doneSeats}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[12px] leading-[130%] text-muted">Tickets</span>
-                  <span className="text-[12px] leading-[130%]">{ticketSummary}</span>
+                  <span className="text-[12px] leading-[130%]">{doneTickets}</span>
                 </div>
                 <div className="h-px w-full bg-line" />
                 <div className="flex items-center justify-between">
@@ -516,7 +566,7 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
               <Button size="lg" onClick={() => { onClose(); navigate('/profile?tab=tickets'); }}>
                 View my tickets
               </Button>
-              <Button size="lg" variant="glass" onClick={onClose}>
+              <Button size="lg" variant="glass" onClick={close}>
                 Close
               </Button>
             </div>
@@ -537,7 +587,7 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
               </div>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={close}
                 aria-label="Close"
                 className="flex size-[46px] cursor-pointer items-center justify-center rounded-xl text-muted transition hover:bg-white/10 hover:text-white"
               >
@@ -592,7 +642,7 @@ export default function SeatModal({ session: initial, movie, onClose, onBooked }
                                       <Fragment key={s.id}>
                                         <Seat
                                           seat={s}
-                                          state={taken.includes(s.id) ? 'sold' : s.state}
+                                          state={taken.includes(s.code) ? 'sold' : s.state}
                                           selected={selected.some((x) => x.seat.id === s.id)}
                                           onClick={() => toggleSeat(s)}
                                         />
