@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Calendar, ChevronDown } from "lucide-react";
 import { getProfile, getVenues, updateProfile, fieldErrors } from "../api/profile";
 import { useAuth } from "../context/AuthContext";
+import MyTickets from "../components/MyTickets";
 
 
 function Field({ label, error, helper, children }) {
@@ -220,7 +221,7 @@ export default function Profile() {
       </div>
 
       {tab === "tickets" ? (
-        <p className="mt-10 text-[14px] text-[#A9A9A9]">Tickets are coming in the next step.</p>
+          <MyTickets />
       ) : (
         <div className="mt-10 flex w-full max-w-[880px] flex-col gap-9">
           {incomplete && (
