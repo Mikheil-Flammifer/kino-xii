@@ -75,7 +75,8 @@ export function AuthProvider({ children }) {
   }
 
   const register = async (form) => saveSession((await authApi.register(form)).data)
-  const login = async (email, pw) => saveSession((await authApi.login(email, pw)).data)
+  const login = async (email, password) =>
+    saveSession((await authApi.login({ email, password })).data)
 
   return (
     <AuthContext.Provider

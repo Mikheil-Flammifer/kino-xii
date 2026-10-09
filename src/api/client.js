@@ -14,12 +14,14 @@ export class ApiError extends Error {
   constructor(status, body) {
     super(body?.message || 'Something went wrong')
     this.status = status
+    this.body = body
     // errors present => form problem. errors absent => rule problem (show message as-is)
     this.errors = body?.errors ?? null
+    this.contested = body?.contested ?? null
   }
 }
 
-export async function api(path, { method = 'GET', body, auth = true } = {}) {
+export async function api(path, { method = 'GET', body, auth = true, silent = false } = {}) {
   const headers = { Accept: 'application/json' }
   const token = auth ? tokenStore.get() : null
   if (token) headers.Authorization = `Bearer ${token}`
@@ -32,7 +34,7 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
   const res = await fetch(BASE + path, { method, headers, body })
   const data = await res.json().catch(() => null)
 
-   if (!res.ok) {
+  if (!res.ok) {
     if (res.status === 401 && token) {
       if (silent) tokenStore.clear()
       else onUnauthorized()
