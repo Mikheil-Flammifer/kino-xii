@@ -278,7 +278,6 @@ export default function Sessions() {
           </section>
         </div>
       </div>
-      <Footer />
 
       {booking && (
         <SeatModal

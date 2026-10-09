@@ -25,7 +25,7 @@ export default function Home() {
     <>
       <Hero />
 
-      <div className="flex flex-col gap-10 pt-8">
+      <div className="flex flex-col gap-10 pt-8 mb-8">
        {user && recent.length > 0 && (
           <>
             <section className="px-[70px] pt-[9px]">
@@ -73,7 +73,7 @@ export default function Home() {
 
         <div className="h-px bg-line" />
 
-          <section className="flex flex-col gap-6 px-[70px]">
+          <section className="flex flex-col gap-6 px-[70px] h-[229.66px]">
             <SectionHeader title="Coming soon..." />
 
             {comingSoon.status === 'loading' && (

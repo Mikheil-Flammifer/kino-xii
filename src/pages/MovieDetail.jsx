@@ -116,7 +116,6 @@ export default function MovieDetail() {
           <p className="text-muted">We couldn't load this film.</p>
           <Button onClick={movieQ.reload}>Retry</Button>
         </div>
-        <Footer />
       </>
     );
   }
