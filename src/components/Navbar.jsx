@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Search, ChevronDown, User, Ticket, LogOut, Check } from 'lucide-react'
+import { ChevronDown, User, Ticket, LogOut, Check } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import Avatar from './Avatar'
+import SearchBox from './SearchBox'
 
 function Logo({ small }) {
   return (
@@ -10,26 +11,6 @@ function Logo({ small }) {
       <span>KINO</span>
       <span className="text-accent">XII</span>
     </Link>
-  )
-}
-
-function SearchBox() {
-  const navigate = useNavigate()
-  const [q, setQ] = useState('')
-  const submit = (e) => {
-    e.preventDefault()
-    navigate(q.trim() ? `/sessions?search=${encodeURIComponent(q.trim())}` : '/sessions')
-  }
-  return (
-    <form onSubmit={submit} className="flex h-[41px] w-[380px] items-center gap-1 rounded-full bg-white/10 px-3">
-      <Search size={14} />
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search films and live events"
-        className="w-full bg-transparent px-1 text-sm outline-none placeholder:text-white"
-      />
-    </form>
   )
 }
 

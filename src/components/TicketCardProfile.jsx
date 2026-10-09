@@ -27,7 +27,7 @@ export default function TicketCard({ order, onRefunded }) {
   const [error, setError] = useState('');
 
   const { movie, session } = order;
-  const refunded = order.status === 'refunded';
+  const refunded = order.status === 'refunded' || Boolean(order.refundedAt);
   const showRefund = order.isUpcoming && !refunded;
   const reason = 'Refunds close 2 hours before the session starts.';
 
