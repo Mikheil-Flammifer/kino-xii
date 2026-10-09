@@ -21,6 +21,7 @@ export function normalizeSeatMap(res) {
   };
 }
 
+
 // silent: a stale token must not log the visitor out; the token (if any) sets isMine
 export async function getSeats(sessionId) {
   return normalizeSeatMap(await api(`/sessions/${sessionId}/seats`, { silent: true }));

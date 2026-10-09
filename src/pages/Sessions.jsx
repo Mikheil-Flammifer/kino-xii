@@ -12,6 +12,7 @@ import CardSkeleton from '../components/CardSkeleton';
 import FilterSidebar from '../components/FilterSidebar';
 import Footer from '../components/Footer';
 import SeatModal from '../modals/SeatModal';
+import SessionCard from '../components/SessionCard';
 
 
 const MULTI = ['venue', 'format', 'language', 'time_band'];
@@ -216,7 +217,11 @@ export default function Sessions() {
                             )}
                           </div>
                         </button>
-
+                        <div className="flex flex-wrap gap-3">
+                          {g.items.map((s) => (
+                            <SessionCard key={s.id} s={s} onOpen={() => open(s, g.movie)} />
+                          ))}
+                        </div>
 
                       </div>
                     </div>
@@ -253,6 +258,7 @@ export default function Sessions() {
                       >
                         {n}
                       </button>
+                      
                     )
                   )}
 
