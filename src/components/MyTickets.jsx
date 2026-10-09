@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getTickets } from '../api/tickets';
 import Button from './Button';
-import TicketCard from './TicketCard';
+import TicketCardProfile from './TicketCardProfile';
 
 const byStartDesc = (a, b) => (b.session.startsAt || '').localeCompare(a.session.startsAt || '');
 
@@ -78,7 +78,7 @@ export default function MyTickets() {
       {status === 'ready' && list.length > 0 && (
         <div className="flex flex-col gap-5">
           {list.map((o) => (
-            <TicketCard key={o.reference} order={o} onRefunded={onRefunded} />
+            <TicketCardProfile key={o.reference} order={o} onRefunded={onRefunded} />
           ))}
         </div>
       )}
