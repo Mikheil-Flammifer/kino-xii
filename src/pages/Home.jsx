@@ -25,7 +25,7 @@ export default function Home() {
     <>
       <Hero />
 
-      <div className="flex flex-col gap-10 pt-8 mb-8">
+      <div className="flex flex-col gap-10 pt-8 ">
        {user && recent.length > 0 && (
           <>
             <section className="px-[70px] pt-[9px]">
