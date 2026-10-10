@@ -11,22 +11,23 @@ export function getRecentMovies() {
 
     const movies = JSON.parse(value)
 
-    return Array.isArray(movies) ? movies : []
+    return Array.isArray(movies) ? movies.filter((m) => m?.slug) : []
   } catch {
     return []
   }
 }
 
 export function addRecentMovie(movie) {
-  if (!movie?.id) {
+  if (!movie?.slug) {
     return
   }
+  console.log('recent', recent, 'nowPlaying', nowPlaying.data?.[0])
 
   const current = getRecentMovies()
 
   const updated = [
     movie,
-    ...current.filter((item) => item.id !== movie.id),
+    ...current.filter((item) => item.slug !== movie.slug),
   ].slice(0, MAX_RECENT)
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))

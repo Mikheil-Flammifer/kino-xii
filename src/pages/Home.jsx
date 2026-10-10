@@ -32,7 +32,7 @@ export default function Home() {
               <h2 className="mb-5 text-[24px] leading-[26px] font-extrabold">Recently viewed</h2>
               <div className="grid grid-cols-4 gap-5">
                 {recent.map((m) => (
-                  <CardSmall key={m.id} movie={m} />
+                  <CardSmall key={m.slug} movie={m} />
                 ))}
               </div>
             </section>
